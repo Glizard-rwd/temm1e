@@ -1,70 +1,32 @@
-# ================================================
-# SkyClaw Multi-stage Dockerfile
-# Cloud-native Rust AI agent runtime
-# Target: <50 MB final image, <50 ms cold start
-# ================================================
+# ---- Builder stage ----
+FROM rust:1.82 AS builder
 
-# ----- Stage 1: Chef planner -----
-FROM rust:1.83-slim AS chef
-RUN cargo install cargo-chef --locked
-RUN apt-get update && apt-get install -y musl-tools && rm -rf /var/lib/apt/lists/*
-RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 WORKDIR /app
 
-# ----- Stage 2: Dependency planner -----
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+# Copy manifests first for dependency caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY src/ src/
 
-# ----- Stage 3: Builder (cached dependencies) -----
-FROM chef AS builder
+RUN cargo build --release
 
-# Determine musl target based on build platform
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-      echo "aarch64-unknown-linux-musl" > /tmp/rust-target; \
-    else \
-      echo "x86_64-unknown-linux-musl" > /tmp/rust-target; \
-    fi
+# ---- Runtime stage ----
+FROM debian:bookworm-slim
 
-# Cook dependencies first (cached layer)
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release \
-    --target $(cat /tmp/rust-target) \
-    --recipe-path recipe.json
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        chromium \
+    && rm -rf /var/lib/apt/lists/*
 
-# Build the actual binary
-COPY . .
-RUN cargo build --release \
-    --target $(cat /tmp/rust-target) \
-    --bin skyclaw && \
-    cp target/$(cat /tmp/rust-target)/release/skyclaw /app/skyclaw-bin
+# chromiumoxide looks for "chromium" or "chromium-browser" on PATH
+ENV CHROME_PATH=/usr/bin/chromium
 
-# ----- Stage 4: Runtime (minimal) -----
-FROM alpine:3.19 AS runtime
+WORKDIR /app
 
-# Install curl for health checks, ca-certificates for TLS
-RUN apk add --no-cache curl ca-certificates && \
-    addgroup -S skyclaw && \
-    adduser -S -G skyclaw skyclaw
+COPY --from=builder /app/target/release/skyclaw ./skyclaw
 
-# Copy binary and config
-COPY --from=builder /app/skyclaw-bin /usr/local/bin/skyclaw
-COPY config/default.toml /etc/skyclaw/default.toml
+ENV TELEGRAM_BOT_TOKEN=""
 
-# Create data directory
-RUN mkdir -p /var/lib/skyclaw && \
-    chown -R skyclaw:skyclaw /var/lib/skyclaw /etc/skyclaw
-
-USER skyclaw
-WORKDIR /var/lib/skyclaw
-
-# Gateway port
 EXPOSE 8080
 
-# Health check: hit the gateway endpoint
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
-
-ENTRYPOINT ["skyclaw"]
-CMD ["start"]
+ENTRYPOINT ["./skyclaw", "start"]

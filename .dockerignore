@@ -1,13 +1,5 @@
 target/
 .git/
-.gitignore
-docs/
-Claude-Production-Grade-Suite/
-*.md
-*.env
+.env
 *.key
 *.pem
-credentials.json
-.DS_Store
-.idea/
-.vscode/
