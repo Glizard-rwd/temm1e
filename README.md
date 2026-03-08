@@ -16,16 +16,28 @@ SkyClaw is an autonomous AI agent that lives on your server and talks to you thr
 
 No web dashboards. No config files to edit. Deploy, paste your API key in Telegram, and go.
 
-## Highlights
+## Key Metrics
 
 | Metric | Value |
 |--------|-------|
-| **Language** | Rust (Edition 2021, MSRV 1.82) |
-| **Codebase** | 38,126 lines across 96 source files |
-| **Tests** | 905 passing, 0 clippy warnings |
-| **Crates** | 13 workspace crates + 1 binary |
-| **Features** | 35 implemented across 7 phases |
-| **Agent modules** | 20 (AGENTIC CORE) |
+| **Lines of Rust** | 38,126 across 96 source files |
+| **Tests** | 905 passing, 0 failures |
+| **Clippy warnings** | 0 (CI gate: `-D warnings`) |
+| **Workspace crates** | 13 + 1 binary |
+| **Implemented features** | 35 across 7 phases |
+| **AGENTIC CORE modules** | 20 |
+| **Traits (core)** | 13 shared trait definitions |
+| **AI providers** | 3 (Anthropic, OpenAI, Gemini) |
+| **Messaging channels** | 5 (Telegram, Discord, Slack, WhatsApp, CLI) |
+| **Agent tools** | 7 (shell, browser, file ops, web fetch, git, messaging, file transfer) |
+| **Encryption** | ChaCha20-Poly1305 + Ed25519 |
+| **Memory backends** | 3 (SQLite, Markdown, failover) |
+| **File storage** | 2 (local, S3/R2) |
+| **Observability** | OpenTelemetry, 6 predefined metrics |
+| **Security features** | Auto-whitelist, vault encryption, path traversal protection, force-push block |
+| **Vision support** | JPEG, PNG, GIF, WebP (Anthropic + OpenAI formats) |
+| **Release profile** | `opt-level=z`, LTO, 1 codegen unit, stripped, `panic=abort` |
+| **Minimum Rust version** | 1.82 (Edition 2021) |
 
 ## 3-Step Setup
 
@@ -175,6 +187,10 @@ cargo build --release                                      # Release build
 - Rust 1.82+
 - Chrome/Chromium (for browser tool)
 - A Telegram bot token
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=nagisanzenin/skyclaw&type=Date)](https://star-history.com/#nagisanzenin/skyclaw&Date)
 
 ## License
 
