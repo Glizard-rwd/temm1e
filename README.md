@@ -131,7 +131,24 @@ Paste any of these API keys in Telegram — SkyClaw detects the provider automat
 
 ## AGENTIC CORE
 
-SkyClaw's intelligence layer — 20 modules that make it autonomous:
+SkyClaw's intelligence layer — 20 modules driving an autonomous execution cycle:
+
+```
+ORDER ─→ THINK ─→ ACTION ─→ VERIFY ─┐
+                                      │
+          ┌───────────────────────────┘
+          │
+          ├─ DONE? ──→ yes ──→ LEARN ──→ END
+          │
+          └─ no ──→ THINK ─→ ACTION ─→ VERIFY ─→ ...
+```
+
+- **ORDER**: Inbound message decomposed into task graph
+- **THINK**: Context assembly — system prompt, tool defs, memory, knowledge, past learnings (5% budget)
+- **ACTION**: Tool execution — shell, browser, file ops, web fetch, git
+- **VERIFY**: Self-correction engine checks output, triggers strategy rotation on repeated failures
+- **DONE**: Measurable completion criteria, not assertions
+- **LEARN**: `extract_learnings()` analyzes tools used, failures, outcomes → stores `TaskLearning` in memory → injected into future THINK steps
 
 | Category | Modules |
 |----------|---------|

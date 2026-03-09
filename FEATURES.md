@@ -117,7 +117,7 @@ Priority-based token budgeting across 7 categories: system prompt (always), tool
 Detects compound tasks (multiple verbs, numbered lists, "and"/"then" connectors). Injects DONE criteria prompt for the LLM to articulate verifiable completion conditions. Appends verification reminder on final reply.
 
 ### 1.7 Cross-Task Learning
-`extract_learnings()` analyzes completed history — tools used, failures, strategy rotations — produces `TaskLearning` with task_type, approach, outcome, lesson. Stored in memory with `learning:` prefix. Injected into future context at 5% budget.
+`extract_learnings()` analyzes completed history — tools used, failures, strategy rotations — produces `TaskLearning` with task_type, approach, outcome, lesson. Stored in memory as `LongTerm` entries with `learning:{uuid}` ID. Context builder searches and injects up to 5 past learnings (5% token budget) into THINK step of future tasks. Verified working: shell task produces learning → next session's context allocation shows `learnings=25` tokens injected.
 
 ### 2.1 Watchdog
 Monitors subsystems (provider, memory, channel, tools). `WatchdogConfig` with check intervals and failure thresholds. `HealthReport` with per-subsystem status. Auto-restarts degraded subsystems.
