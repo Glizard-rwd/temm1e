@@ -77,7 +77,14 @@ impl OpenAICompatProvider {
         });
 
         if let Some(max_tokens) = request.max_tokens {
-            body["max_tokens"] = serde_json::json!(max_tokens);
+            // OpenAI deprecated max_tokens in favor of max_completion_tokens
+            // for newer models (GPT-4o, o1, etc.). Other OpenAI-compatible
+            // providers (Gemini, Grok, OpenRouter) still use max_tokens.
+            if self.base_url.contains("api.openai.com") {
+                body["max_completion_tokens"] = serde_json::json!(max_tokens);
+            } else {
+                body["max_tokens"] = serde_json::json!(max_tokens);
+            }
         }
 
         if let Some(temp) = request.temperature {
@@ -730,7 +737,9 @@ mod tests {
 
         let body = provider.build_request_body(&request, false).unwrap();
         assert_eq!(body["model"], "gpt-4o");
-        assert_eq!(body["max_tokens"], 2048);
+        // OpenAI uses max_completion_tokens, not max_tokens
+        assert_eq!(body["max_completion_tokens"], 2048);
+        assert!(body.get("max_tokens").is_none());
         // f32 precision: compare approximately
         let temp = body["temperature"].as_f64().unwrap();
         assert!(
