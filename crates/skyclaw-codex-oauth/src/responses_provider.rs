@@ -102,7 +102,10 @@ impl CodexResponsesProvider {
                                     .keys()
                                     .map(|k| serde_json::Value::String(k.clone()))
                                     .collect();
-                                obj.insert("required".to_string(), serde_json::Value::Array(required));
+                                obj.insert(
+                                    "required".to_string(),
+                                    serde_json::Value::Array(required),
+                                );
                             }
                         }
                     }
@@ -404,7 +407,12 @@ impl Provider for CodexResponsesProvider {
                                             .to_string();
                                         if !item_id.is_empty() {
                                             tracing::info!(item_id = %item_id, call_id = %call_id, name = %name, "Function call started");
-                                            tool_calls.push((item_id, call_id, name, String::new()));
+                                            tool_calls.push((
+                                                item_id,
+                                                call_id,
+                                                name,
+                                                String::new(),
+                                            ));
                                         }
                                     }
                                 }
@@ -427,7 +435,12 @@ impl Provider for CodexResponsesProvider {
                                 } else if !item_id.is_empty() {
                                     // Orphaned delta — no matching added event. Store anyway
                                     // with item_id as both keys, name will be filled by done event
-                                    tool_calls.push((item_id.clone(), item_id, String::new(), delta.to_string()));
+                                    tool_calls.push((
+                                        item_id.clone(),
+                                        item_id,
+                                        String::new(),
+                                        delta.to_string(),
+                                    ));
                                 }
                             }
                             "response.output_item.done" => {

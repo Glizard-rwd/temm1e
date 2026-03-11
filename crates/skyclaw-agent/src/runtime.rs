@@ -122,8 +122,13 @@ impl AgentRuntime {
         // Cap max_context_tokens to the model's actual context window minus
         // output token headroom. This prevents trying to fill 30K tokens of
         // input into a model that only has 32K total (e.g. qwen-2.5-7b).
+        // A 10% safety margin absorbs token estimation errors (estimate_tokens()
+        // uses len/4 which can underestimate by ~20% on code/CJK text).
+        // Floor at context_window/2 for models where output == context (e.g. phi-4).
         let (model_ctx_window, model_max_output) = model_registry::model_limits(&model);
-        let model_input_budget = model_ctx_window.saturating_sub(model_max_output);
+        let raw_input_budget = model_ctx_window.saturating_sub(model_max_output);
+        let min_input_budget = model_ctx_window / 2;
+        let model_input_budget = raw_input_budget.max(min_input_budget) * 9 / 10;
         let effective_context = max_context_tokens.min(model_input_budget);
 
         if effective_context < max_context_tokens {
