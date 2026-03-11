@@ -17,7 +17,12 @@
 
 # SkyClaw
 
-Hyper-performance Rust agent runtime with extreme resilience and continuous self-learning. Deploys once, stays up forever. Learns from every task, remembers across sessions, self-heals through failures. **v2.1: MCP self-extension — the agent discovers and installs new tools at runtime via Model Context Protocol.** 55K lines, 1266 tests, zero warnings, zero panic paths. [Benchmark report](docs/benchmarks/BENCHMARK_REPORT.md).
+Hyper-performance Rust agent runtime with extreme resilience and continuous self-learning.
+Deploys once, stays up forever. Learns from every task, remembers across sessions, self-heals through failures.
+
+**v2.1: MCP self-extension** — the agent discovers and installs new tools at runtime via Model Context Protocol.
+
+55K lines | 1,266 tests | zero warnings | zero panic paths | 15 MB idle RAM | 31ms cold start | [Benchmark report](docs/benchmarks/BENCHMARK_REPORT.md)
 
 ## What It Does
 
