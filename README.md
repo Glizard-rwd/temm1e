@@ -190,6 +190,8 @@ skyclaw auth login      # re-authenticate when token expires (~10 days)
 ```
 
 > On a headless server with no browser, use `skyclaw auth login --headless` — it prints a URL to open on any device, then you paste the redirect URL back.
+>
+> For Docker/Kubernetes deployments, add `--output ./oauth.json` to export the token file for mounting into containers. See [Docker setup guide](docs/setup/docker-oauth.md).
 
 ### Option B: API Key (any provider)
 
@@ -228,6 +230,24 @@ skyclaw stop                         # graceful shutdown
 ```
 
 > **Important:** `--daemon` requires a completed setup. First-time users must run `skyclaw start` in the foreground to complete onboarding or run `skyclaw auth login` first.
+
+### Docker / Docker Compose
+
+Authenticate on your host machine, then mount the token file into the container:
+
+```bash
+# On your host machine
+skyclaw auth login --output ./oauth.json
+
+# docker-compose.yml
+#   volumes:
+#     - ./oauth.json:/root/.skyclaw/oauth.json
+#     - ./skyclaw.toml:/root/.skyclaw/skyclaw.toml
+```
+
+SkyClaw auto-detects the mounted token at startup. Tokens auto-refresh and persist through the volume mount.
+
+See [docs/setup/docker-oauth.md](docs/setup/docker-oauth.md) for the full guide (Kubernetes, headless servers, troubleshooting).
 
 ## Supported Providers
 
@@ -463,6 +483,7 @@ skyclaw status             Show running state
 skyclaw update             Check for updates and rebuild
 skyclaw auth login         Authenticate via OpenAI Codex OAuth (PKCE)
 skyclaw auth login --headless  Headless OAuth (paste redirect URL)
+skyclaw auth login --output ./oauth.json  Export token for Docker/remote deploy
 skyclaw auth status        Show OAuth token status
 skyclaw auth logout        Clear stored OAuth tokens
 skyclaw config validate    Validate configuration

@@ -116,6 +116,9 @@ enum AuthCommands {
         /// Use headless mode (paste URL instead of browser redirect)
         #[arg(long)]
         headless: bool,
+        /// Export oauth.json to a custom path (for Docker/remote deployments)
+        #[arg(long)]
+        output: Option<String>,
     },
     /// Show current OAuth authentication status
     Status,
@@ -990,9 +993,7 @@ fn list_configured_providers() -> String {
     }
 
     lines.push(String::new());
-    lines.push(
-        "Use /addkey to add a new key, /removekey <provider> to remove one.".to_string(),
-    );
+    lines.push("Use /addkey to add a new key, /removekey <provider> to remove one.".to_string());
     lines.join("\n")
 }
 
@@ -1010,10 +1011,21 @@ fn handle_model_command(args: &str) -> String {
         if !has_creds && skyclaw_codex_oauth::TokenStore::exists() {
             if args.is_empty() {
                 let codex_models = [
-                    "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark",
-                    "gpt-5.2", "gpt-5.2-codex", "gpt-5.1-codex", "gpt-5.1-codex-mini",
-                    "gpt-5", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5-mini",
-                    "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o4-mini",
+                    "gpt-5.4",
+                    "gpt-5.3-codex",
+                    "gpt-5.3-codex-spark",
+                    "gpt-5.2",
+                    "gpt-5.2-codex",
+                    "gpt-5.1-codex",
+                    "gpt-5.1-codex-mini",
+                    "gpt-5",
+                    "gpt-5-codex",
+                    "gpt-5-codex-mini",
+                    "gpt-5-mini",
+                    "gpt-4.1",
+                    "gpt-4.1-mini",
+                    "gpt-4.1-nano",
+                    "o4-mini",
                 ];
                 let mut lines = vec![
                     "Current: gpt-5.4 on openai-codex provider (OAuth)".to_string(),
@@ -1031,10 +1043,7 @@ fn handle_model_command(args: &str) -> String {
             } else {
                 let target = args.trim();
                 // Return "Model switched:" so the caller rebuilds the agent
-                return format!(
-                    "Model switched: codex-oauth → {}\nCodex OAuth",
-                    target
-                );
+                return format!("Model switched: codex-oauth → {}\nCodex OAuth", target);
             }
         }
     }
@@ -4452,7 +4461,7 @@ Just type a message to chat with the AI agent.",
         }
         #[cfg(feature = "codex-oauth")]
         Commands::Auth { command } => match command {
-            AuthCommands::Login { headless } => {
+            AuthCommands::Login { headless, output } => {
                 println!("SkyClaw — OpenAI Codex OAuth Login");
                 println!("Authenticating with your ChatGPT subscription...\n");
 
@@ -4464,6 +4473,24 @@ Just type a message to chat with the AI agent.",
                         println!("  Email:   {}", email);
                         println!("  Expires: {}", expires);
                         println!("  Model:   gpt-5.4 (default)");
+
+                        // Export to custom path if --output was specified
+                        if let Some(ref out_path) = output {
+                            let path = std::path::PathBuf::from(out_path);
+                            let tokens = store.get_tokens().await;
+                            let dir = path.parent().unwrap_or(std::path::Path::new("."));
+                            if let Err(e) = std::fs::create_dir_all(dir) {
+                                eprintln!("Failed to create directory {}: {}", dir.display(), e);
+                                std::process::exit(1);
+                            }
+                            let content = serde_json::to_string_pretty(&tokens).unwrap();
+                            if let Err(e) = std::fs::write(&path, content) {
+                                eprintln!("Failed to write {}: {}", path.display(), e);
+                                std::process::exit(1);
+                            }
+                            println!("  Exported: {}", path.display());
+                        }
+
                         println!("\n  Run `skyclaw start` to go online.");
                     }
                     Err(e) => {

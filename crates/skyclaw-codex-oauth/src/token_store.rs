@@ -97,6 +97,11 @@ impl TokenStore {
         Ok(updated.access_token)
     }
 
+    /// Get a clone of the current tokens (for export).
+    pub async fn get_tokens(&self) -> CodexOAuthTokens {
+        self.tokens.lock().await.clone()
+    }
+
     /// Get the current email (for display purposes).
     pub async fn email(&self) -> String {
         self.tokens.lock().await.email.clone()
