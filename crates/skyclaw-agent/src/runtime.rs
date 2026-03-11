@@ -702,7 +702,17 @@ impl AgentRuntime {
                                     output_cap / 4, // convert chars to approx tokens
                                 )
                             } else {
-                                let truncated = &output.content[..output_cap];
+                                // Safe UTF-8 truncation: find a char boundary at or before output_cap
+                                let safe_end = if output.content.is_char_boundary(output_cap) {
+                                    output_cap
+                                } else {
+                                    output.content[..output_cap]
+                                        .char_indices()
+                                        .last()
+                                        .map(|(i, _)| i)
+                                        .unwrap_or(0)
+                                };
+                                let truncated = &output.content[..safe_end];
                                 format!(
                                     "{}...\n\n[Output truncated — {} chars total]",
                                     truncated,

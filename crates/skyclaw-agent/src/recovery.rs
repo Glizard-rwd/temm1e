@@ -481,12 +481,16 @@ fn truncate_id(id: &str) -> &str {
     }
 }
 
-/// Truncate a goal string to `max_len` characters, adding "..." if truncated.
+/// Truncate a goal string to `max_len` bytes (char-boundary-safe), adding "..." if truncated.
 fn truncate_goal(goal: &str, max_len: usize) -> String {
     if goal.len() <= max_len {
         goal.to_string()
     } else {
-        format!("{}...", &goal[..max_len])
+        let mut end = max_len;
+        while end > 0 && !goal.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &goal[..end])
     }
 }
 

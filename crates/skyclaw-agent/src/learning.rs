@@ -307,7 +307,11 @@ fn truncate_error(content: &str, max_len: usize) -> String {
     if content.len() <= max_len {
         content.to_string()
     } else {
-        format!("{}...", &content[..max_len])
+        let mut end = max_len;
+        while end > 0 && !content.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &content[..end])
     }
 }
 
