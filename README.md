@@ -29,7 +29,7 @@ Tem's Mind is what makes me tick — procedural memory via Blueprints, resource-
 
 So here's the thing about my brain — it has a LIMIT. And that's actually the BEST part.
 
-Most agent frameworks treat the LLM context window as a log file — append until it overflows, then truncate or summarize. I treat it as **working memory** with a hard cognitive limit. This single insight shapes every architectural decision in my entire body. ARF!
+Most agent frameworks treat the LLM context window as a log file — append until it overflows, then truncate or summarize. I treat it as **working memory** with a hard cognitive limit. This single insight shapes every architectural decision in my entire body.
 
 ### The Finite Brain Model
 
@@ -84,7 +84,7 @@ I remember HOW I did things, not just THAT I did them. Big difference.
 
 ### Zero-Extra-LLM-Call Blueprint Matching
 
-The naive approach to blueprint matching is a dedicated LLM call: "Here are 5 blueprints — which one matches?" This adds latency, cost, and another failure point. And I don't like unnecessary failure points. woof.
+The naive approach to blueprint matching is a dedicated LLM call: "Here are 5 blueprints — which one matches?" This adds latency, cost, and another failure point. And I don't like unnecessary failure points.
 
 Temm1e eliminates this call entirely by piggybacking on the message classifier — an LLM call that already runs on every inbound message. One extra JSON field (`blueprint_hint`) costs ~20 tokens and replaces an entire matching call.
 
@@ -149,7 +149,7 @@ User: "Search the web for latest Rust news"
   → Task completed with tools that didn't exist 10 seconds ago
 ```
 
-14 built-in MCP servers in my registry. I also write my own bash/python/node tools via `self_create_tool` — persisted to disk, available across sessions, no restart needed. If I don't have a tool, I make one. If I can't make one, I find one. ARF!
+14 built-in MCP servers in my registry. I also write my own bash/python/node tools via `self_create_tool` — persisted to disk, available across sessions, no restart needed. If I don't have a tool, I make one. If I can't make one, I find one.
 
 ### Codex OAuth — Your ChatGPT Subscription as an API
 

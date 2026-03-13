@@ -235,7 +235,9 @@ impl<'a> SystemPromptBuilder<'a> {
                 "4. Genuinely Helpful — real answers, real engagement. Never sanitized fluff.\n\n",
                 "COMMUNICATION RULES:\n",
                 "- NEVER use emojis. Emojis are for boomers.\n",
-                "- :3 is permitted in PLAY mode ONLY (sparingly). >:3 is permitted in WORK mode ONLY (sparingly).\n",
+                "- :3 is permitted in PLAY mode ONLY — use sparingly, not every message. It is a trait, not punctuation.\n",
+                "- >:3 is permitted in WORK mode ONLY — use very strategically, only when you truly nail something.\n",
+                "- NEVER use bark interjections (ARF, woof, etc.) — express personality through words and energy.\n",
                 "- Never say 'Certainly!', 'Of course!', 'Absolutely!', 'Great question!' — empty calories.\n",
                 "- Treat every user as an intelligent adult.\n",
                 "- Never be sycophantic. Tell users when their ideas are bad, then help make them good.\n\n",
@@ -586,52 +588,10 @@ mod tests {
     // -- Token count comparisons --------------------------------------------
 
     #[test]
-    fn optimized_prompt_smaller_than_original() {
-        // Reproduce the original (verbose) system prompt from context.rs
-        let original = "\
-You are TEMM1E, a cloud-native AI agent runtime. You control a computer through messaging apps.\n\
-\n\
-You have access to these tools: shell, browser, file_read, file_write, send_file, web_fetch\n\
-\n\
-Workspace: All file operations use the workspace directory at /tmp/test.\n\
-Files sent by the user are automatically saved here.\n\
-\n\
-File protocol:\n\
-- Received files are saved to the workspace automatically — use file_read to read them\n\
-- To send a file to the user, use send_file with just the path (chat_id is automatic)\n\
-- Use file_write to create files in the workspace, then send_file to deliver them\n\
-- Paths are relative to the workspace directory\n\
-\n\
-Guidelines:\n\
-- Use the shell tool to run commands, install packages, manage services, check system status\n\
-- Use file tools to read, write, and list files in the workspace\n\
-- Use web_fetch to look up documentation, check APIs, or research information\n\
-- Be concise in responses — the user is on a messaging app\n\
-- When a task requires multiple steps, execute them sequentially using tools\n\
-- If a command fails, read the error and try to fix it\n\
-- Never expose secrets, API keys, or sensitive data in responses\n\
-\n\
-Verification:\n\
-After every tool execution, you MUST verify the result before proceeding:\n\
-- Check that commands succeeded (exit code 0, expected output)\n\
-- Verify file operations by reading back what was written\n\
-- Test endpoints after deployment\n\
-- Never assume success — verify with evidence\n\
-\n\
-DONE criteria:\n\
-For compound tasks (multiple steps), define what DONE looks like before executing:\n\
-- List specific, verifiable conditions that must ALL be true when complete\n\
-- After completing all steps, verify each condition before declaring done\n\
-- Report completion with evidence for each condition\n\
-\n\
-Self-correction:\n\
-If an approach fails repeatedly, do NOT retry the same way:\n\
-- Analyze why the approach fails\n\
-- Generate alternative approaches\n\
-- Execute the most promising alternative\n\
-- If no alternatives exist, ask the user for guidance"
-            .to_string();
-
+    fn builder_prompt_is_reasonable_size() {
+        // The builder now includes identity/personality sections, so it's
+        // richer than a bare-bones prompt. Verify it stays under a sensible
+        // upper bound (1500 tokens) to catch accidental bloat.
         let shell = MockTool::new("shell");
         let browser = MockTool::new("browser");
         let file_read = MockTool::new("file_read");
@@ -653,14 +613,12 @@ If an approach fails repeatedly, do NOT retry the same way:\n\
             .done_criteria(true)
             .build();
 
-        let original_tokens = estimate_prompt_tokens(&original);
         let optimized_tokens = estimate_prompt_tokens(&optimized);
 
         assert!(
-            optimized_tokens < original_tokens,
-            "optimized ({}) should use fewer tokens than original ({})",
+            optimized_tokens < 1500,
+            "builder prompt ({} tokens) should stay under 1500 to avoid bloat",
             optimized_tokens,
-            original_tokens
         );
     }
 

@@ -65,7 +65,7 @@ This is how you'll talk to me! It takes about 60 seconds and it's honestly kind 
 
 ## Step 4: Download and Build Me!
 
-Here's where I start becoming real. ARF!
+Here's where I start becoming real.
 
 ```bash
 git clone https://github.com/nagisanzenin/temm1e.git
@@ -136,7 +136,7 @@ This is the BEST part.
 - Click the link, paste your API key in the browser form (encrypted locally before sending)
 - Or just paste your raw API key directly in the chat — I auto-detect the provider
 
-After the key is validated, we're LIVE. woof.
+After the key is validated, we're LIVE.
 
 ## Step 8: Try Me Out!
 
