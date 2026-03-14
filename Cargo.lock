@@ -4530,7 +4530,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -4568,7 +4568,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-agent"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -4591,7 +4591,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-automation"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "chrono",
  "temm1e-core",
@@ -4602,7 +4602,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-channels"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4627,7 +4627,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-codex-oauth"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -4648,7 +4648,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-core"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4671,7 +4671,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-filestore"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -4689,7 +4689,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-gateway"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -4716,7 +4716,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-mcp"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "dirs",
@@ -4732,7 +4732,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-memory"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4750,7 +4750,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-observable"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "opentelemetry",
@@ -4764,7 +4764,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-providers"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -4779,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-skills"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "dirs",
  "serde",
@@ -4792,7 +4792,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-test-utils"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4807,9 +4807,10 @@ dependencies = [
 
 [[package]]
 name = "temm1e-tools"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
+ "base64",
  "bytes",
  "chromiumoxide",
  "chrono",
@@ -4827,7 +4828,7 @@ dependencies = [
 
 [[package]]
 name = "temm1e-vault"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "async-trait",
  "base64",

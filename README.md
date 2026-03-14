@@ -10,7 +10,7 @@
   <a href="https://github.com/nagisanzenin/temm1e/stargazers"><img src="https://img.shields.io/github/stars/nagisanzenin/temm1e?style=flat&color=gold&logo=github" alt="GitHub Stars"></a>
   <a href="https://discord.gg/3ux2c5xz"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License">
-  <img src="https://img.shields.io/badge/version-2.5.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.6.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/tests-1394-green.svg" alt="1394 tests">
   <img src="https://img.shields.io/badge/providers-8-red.svg" alt="8 providers">
 </p>
@@ -200,7 +200,7 @@ Plus Z.ai and MiniMax via config. 50+ models in the registry with per-model cont
 
 **Channels:** [Telegram](docs/channels/telegram.md) | [Discord](docs/channels/discord.md) | [Slack](docs/channels/slack.md) | [CLI](docs/channels/cli.md)
 
-**13 built-in tools:** Shell, stealth browser (anti-detection), file ops, web fetch, git, messaging, file transfer, memory CRUD, key management, MCP management, self-extend (discover + install MCP servers), self-add MCP, self-create tool (bash/python/node scripts persisted to disk).
+**13 built-in tools:** Shell, stealth browser (anti-detection, vision-based click_at), file ops, web fetch, git, messaging, file transfer, memory CRUD, key management, MCP management, self-extend (discover + install MCP servers), self-add MCP, self-create tool (bash/python/node scripts persisted to disk).
 
 **14 MCP servers** in the built-in registry (Playwright, PostgreSQL, GitHub, Brave Search, etc.) — I discover and install them at runtime via `self_extend_tool`.
 
@@ -276,6 +276,8 @@ Requires Rust 1.82+ and Chrome/Chromium (for the browser tool).
 Every version of me, from first breath to right now:
 
 ```
+2026-03-14  v2.6.0  ●━━━ Introduce TEMM1E — vision-based browser interaction (screenshot→LLM→click_at via CDP DispatchMouseEvent), Tool trait vision extension (take_last_image + ToolOutputImage), model_supports_vision gating, message deduplication fixes (send_message_used flag, pending queue scoping, empty history skip), interceptor no max_tokens, blueprint user notification, rfind for ToolResult injection ordering, Tem identity in system prompt, agentic core snapshot documentation
+                    │
 2026-03-13  v2.5.0  ●━━━ Executable DAG + Blueprint System — blueprint phase parallelism via FuturesUnordered (independent phases run concurrently, up to 3x speedup, zero extra LLM calls), phase parser + TaskGraph bridge, sequential-by-default dependency model, parallel_phases on by default, /reload /reset messaging commands, admin-gated /restart, temm1e reset --confirm CLI factory reset with backup, MCP HTTP Accept header fix (#12), 1394 tests
                     │
 2026-03-11  v2.4.1  ●━━━ Codex OAuth polish — OAuth auto-detect at startup (no config change needed), /model + /keys Codex-aware, live model switching for Codex OAuth (agent hot-rebuild), callback port race condition fix, LLM classifier stop category, Codex Responses API probe validation, 1343 tests

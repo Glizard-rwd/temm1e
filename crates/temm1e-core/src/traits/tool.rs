@@ -34,6 +34,16 @@ pub struct ToolOutput {
     pub is_error: bool,
 }
 
+/// Image data produced by a tool execution (e.g., browser screenshot).
+/// Used to feed vision data back to the LLM for visual reasoning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolOutputImage {
+    /// MIME type (e.g., "image/png")
+    pub media_type: String,
+    /// Base64-encoded image data
+    pub data: String,
+}
+
 /// Context provided to tools during execution
 pub struct ToolContext {
     pub workspace_path: std::path::PathBuf,
@@ -59,4 +69,11 @@ pub trait Tool: Send + Sync {
     /// Execute the tool with given input
     async fn execute(&self, input: ToolInput, ctx: &ToolContext)
         -> Result<ToolOutput, Temm1eError>;
+
+    /// Consume image data produced by the last execution.
+    /// Called by the runtime after execute() to inject vision data into the
+    /// conversation. Default: returns None (most tools produce no images).
+    fn take_last_image(&self) -> Option<ToolOutputImage> {
+        None
+    }
 }

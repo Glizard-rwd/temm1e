@@ -616,201 +616,6 @@ impl AgentRuntime {
                 None
             };
 
-        // ── Executable DAG: Blueprint Phase Parallelism ──────────────
-        // When parallel_phases is enabled and a blueprint is matched with >1
-        // parseable phases, execute them via the TaskGraph DAG instead of
-        // the holistic loop. Independent phases run concurrently.
-        // This does NOT affect tool-level parallelism in executor.rs.
-        if self.parallel_phases {
-            if let Some(ref bp) = active_blueprint {
-                let phases = crate::blueprint::parse_blueprint_phases(&bp.body);
-                if phases.len() > 1 {
-                    if let Some(mut graph) = crate::blueprint::phases_to_task_graph(
-                        &phases,
-                        msg.text.as_deref().unwrap_or(""),
-                    ) {
-                        info!(
-                            blueprint = %bp.id,
-                            phase_count = phases.len(),
-                            "Executing blueprint via phase DAG"
-                        );
-
-                        let task_start = Instant::now();
-                        let mut total_api_calls: u32 = 0;
-                        let mut total_input_tokens: u32 = 0;
-                        let mut total_output_tokens: u32 = 0;
-                        let mut total_tools_used: u32 = 0;
-                        let mut total_cost_usd: f64 = 0.0;
-                        let mut phase_results: Vec<(String, String)> = Vec::new();
-                        let max_concurrent_phases: usize = 3;
-
-                        // DAG execution loop: process ready phases until done or failed
-                        loop {
-                            let ready: Vec<String> =
-                                graph.ready_tasks().iter().map(|t| t.id.clone()).collect();
-
-                            if ready.is_empty() {
-                                break; // All done or blocked by failures
-                            }
-
-                            // Mark ready tasks as running
-                            for id in &ready {
-                                let _ = graph.mark_running(id);
-                            }
-
-                            // Execute ready phases concurrently using FuturesUnordered
-                            // (runs on current task — no Send bound required, unlike tokio::spawn).
-                            // Concurrency is bounded by taking at most max_concurrent_phases per wave.
-                            use futures::stream::{FuturesUnordered, StreamExt};
-
-                            let batch: Vec<String> =
-                                ready.into_iter().take(max_concurrent_phases).collect();
-
-                            let mut phase_futures = FuturesUnordered::new();
-
-                            for phase_id in &batch {
-                                let phase = phases.iter().find(|p| p.id == *phase_id).unwrap();
-                                let phase_instruction = format!(
-                                    "Execute this phase of the blueprint '{}':\n\n\
-                                     Phase: {} — {}\n\n\
-                                     {}",
-                                    bp.name, phase.name, phase.goal, phase.body,
-                                );
-
-                                // Create isolated session for this phase
-                                let mut phase_session = SessionContext {
-                                    session_id: format!("{}-{}", session.session_id, phase.id),
-                                    channel: session.channel.clone(),
-                                    chat_id: session.chat_id.clone(),
-                                    user_id: session.user_id.clone(),
-                                    history: vec![ChatMessage {
-                                        role: Role::User,
-                                        content: MessageContent::Text(phase_instruction.clone()),
-                                    }],
-                                    workspace_path: session.workspace_path.clone(),
-                                };
-
-                                let phase_id_clone = phase.id.clone();
-                                let phase_name_clone = phase.name.clone();
-
-                                // Create a minimal runtime for this phase (no parallel_phases
-                                // to prevent recursion, no blueprint matching inside phases)
-                                let phase_runtime = AgentRuntime::with_limits(
-                                    Arc::clone(&self.provider),
-                                    Arc::clone(&self.memory),
-                                    self.tools.clone(),
-                                    self.model.clone(),
-                                    self.system_prompt.clone(),
-                                    self.max_turns,
-                                    self.max_context_tokens,
-                                    self.max_tool_rounds,
-                                    self.max_task_duration.as_secs(),
-                                    self.budget.max_spend_usd(),
-                                )
-                                .with_v2_optimizations(self.v2_optimizations)
-                                .with_parallel_phases(false) // prevent recursion
-                                .with_shared_mode_opt(self.shared_mode.clone());
-
-                                let msg_clone = msg.clone();
-
-                                phase_futures.push(async move {
-                                    let result = phase_runtime
-                                        .process_message(
-                                            &msg_clone,
-                                            &mut phase_session,
-                                            None, // no interrupt for sub-phases
-                                            None, // no pending messages
-                                            None, // no reply_tx
-                                            None, // no status_tx
-                                            None, // no cancel
-                                        )
-                                        .await;
-                                    (phase_id_clone, phase_name_clone, result)
-                                });
-                            }
-
-                            // Collect results from all ready phases (polled concurrently)
-                            while let Some((phase_id, phase_name, result)) =
-                                phase_futures.next().await
-                            {
-                                match result {
-                                    Ok((out, usage)) => {
-                                        let _ = graph.mark_completed(&phase_id, out.text.clone());
-                                        total_api_calls += usage.api_calls;
-                                        total_input_tokens += usage.input_tokens;
-                                        total_output_tokens += usage.output_tokens;
-                                        total_tools_used += usage.tools_used;
-                                        total_cost_usd += usage.total_cost_usd;
-                                        phase_results.push((phase_name, out.text));
-                                        info!(phase = %phase_id, "Phase completed");
-                                    }
-                                    Err(e) => {
-                                        let err_msg = format!("{}", e);
-                                        let _ = graph.mark_failed(&phase_id, err_msg.clone());
-                                        phase_results.push((
-                                            phase_name,
-                                            format!("[Phase failed: {}]", err_msg),
-                                        ));
-                                        warn!(phase = %phase_id, error = %e, "Phase failed");
-                                    }
-                                }
-                            }
-
-                            // Safety: break if duration exceeded
-                            if task_start.elapsed() > self.max_task_duration {
-                                warn!("Phase DAG execution exceeded time limit");
-                                break;
-                            }
-                        }
-
-                        // Aggregate results in phase order
-                        let aggregate_text = if phase_results.len() == 1 {
-                            phase_results[0].1.clone()
-                        } else {
-                            phase_results
-                                .iter()
-                                .map(|(name, text)| format!("**{}:**\n{}", name, text))
-                                .collect::<Vec<_>>()
-                                .join("\n\n")
-                        };
-
-                        let failed = graph.is_failed();
-                        if failed {
-                            info!(
-                                blueprint = %bp.id,
-                                progress = %graph.progress_summary(),
-                                "Phase DAG completed with failures"
-                            );
-                        } else {
-                            info!(
-                                blueprint = %bp.id,
-                                progress = %graph.progress_summary(),
-                                "Phase DAG completed successfully"
-                            );
-                        }
-
-                        return Ok((
-                            OutboundMessage {
-                                chat_id: msg.chat_id.clone(),
-                                text: aggregate_text,
-                                reply_to: Some(msg.id.clone()),
-                                parse_mode: None,
-                            },
-                            TurnUsage {
-                                api_calls: total_api_calls,
-                                input_tokens: total_input_tokens,
-                                output_tokens: total_output_tokens,
-                                tools_used: total_tools_used,
-                                total_cost_usd,
-                                provider: self.provider.name().to_string(),
-                                model: self.model.clone(),
-                            },
-                        ));
-                    }
-                }
-            }
-        }
-
         // ── Self-Correction Engine ─────────────────────────────────
         // Track consecutive tool failures per tool name.
         let mut failure_tracker = FailureTracker::new(self.max_consecutive_failures);
@@ -827,6 +632,9 @@ impl AgentRuntime {
         let task_start = Instant::now();
         let mut rounds: usize = 0;
         let mut interrupted = false;
+        // Track if send_message tool was used — suppresses the final reply
+        // to avoid duplicating content already delivered to the user.
+        let mut send_message_used = false;
         loop {
             rounds += 1;
 
@@ -1136,6 +944,15 @@ impl AgentRuntime {
                 }
                 let mut reply_text = text_parts.join("\n");
 
+                // If send_message was used during this turn, the user already
+                // received the substantive response. The final text is typically
+                // a redundant summary ("I sent you..."). Suppress it to avoid
+                // duplicate messages.
+                if send_message_used && !reply_text.trim().is_empty() {
+                    info!("Suppressing final reply — send_message already delivered content to user");
+                    reply_text.clear();
+                }
+
                 // For compound tasks, append a DONE verification reminder
                 // so the LLM checks its criteria before responding.
                 if is_compound {
@@ -1145,11 +962,14 @@ impl AgentRuntime {
                     }
                 }
 
-                // Record assistant reply in history
-                session.history.push(ChatMessage {
-                    role: Role::Assistant,
-                    content: MessageContent::Text(reply_text.clone()),
-                });
+                // Record assistant reply in history (skip if empty — e.g., when
+                // send_message already delivered the content).
+                if !reply_text.trim().is_empty() {
+                    session.history.push(ChatMessage {
+                        role: Role::Assistant,
+                        content: MessageContent::Text(reply_text.clone()),
+                    });
+                }
 
                 // ── Cross-Task Learning ──────────────────────────────
                 // V2: Skip learning for trivial/simple tasks (use_learn=false)
@@ -1246,6 +1066,9 @@ impl AgentRuntime {
                                 }
                             }
                         });
+
+                        // Notify user that a new blueprint is being saved
+                        reply_text.push_str("\n\n_Saving a new blueprint for this workflow — future runs will be faster._");
                     } else if blueprint_was_loaded {
                         // Refine the existing blueprint in the background
                         if let Some(ref loaded_bp) = active_blueprint {
@@ -1305,6 +1128,9 @@ impl AgentRuntime {
                                     }
                                 }
                             });
+
+                            // Notify user that the blueprint is being refined
+                            reply_text.push_str("\n\n_Blueprint updated — workflow refined based on this run._");
                         }
                     }
                 }
@@ -1392,6 +1218,10 @@ impl AgentRuntime {
 
                 let result = execute_tool(tool_name, arguments.clone(), &self.tools, session).await;
 
+                if tool_name == "send_message" && result.as_ref().is_ok_and(|o| !o.is_error) {
+                    send_message_used = true;
+                }
+
                 let output_cap = execution_profile
                     .as_ref()
                     .map_or(MAX_TOOL_OUTPUT_CHARS, |p| p.max_tool_output_chars);
@@ -1474,6 +1304,35 @@ impl AgentRuntime {
                     content,
                     is_error,
                 });
+
+                // ── Vision injection: feed tool images back to the LLM ──
+                // If the tool produced an image (e.g., browser screenshot),
+                // inject it as a ContentPart::Image so the LLM can see it.
+                // Only works with vision-capable models; silently skipped otherwise.
+                if let Some(tool_ref) = self.tools.iter().find(|t| t.name() == tool_name) {
+                    if let Some(img) = tool_ref.take_last_image() {
+                        if model_supports_vision(&self.model) {
+                            info!(
+                                tool = %tool_name,
+                                media_type = %img.media_type,
+                                bytes = img.data.len(),
+                                "Injecting tool image for vision analysis"
+                            );
+                            tool_result_parts.push(ContentPart::Image {
+                                media_type: img.media_type,
+                                data: img.data,
+                            });
+                        } else {
+                            warn!(
+                                model = %self.model,
+                                "Tool produced image but model '{}' does not support vision — image discarded. \
+                                 Switch to a vision-capable model (claude-3.5-sonnet, gpt-4o, gemini-2.0-flash, etc.) \
+                                 for visual browser interaction.",
+                                self.model
+                            );
+                        }
+                    }
+                }
             }
 
             // Inject pending user messages into the last tool result so the
@@ -1496,9 +1355,10 @@ impl AgentRuntime {
                                     .collect::<Vec<_>>()
                                     .join("\n")
                             );
-                            // Append to last tool result
+                            // Append to last ToolResult (not .last_mut() which
+                            // could be an Image from vision injection).
                             if let Some(ContentPart::ToolResult { content, .. }) =
-                                tool_result_parts.last_mut()
+                                tool_result_parts.iter_mut().rfind(|p| matches!(p, ContentPart::ToolResult { .. }))
                             {
                                 content.push_str(&notice);
                             }
@@ -1519,7 +1379,8 @@ impl AgentRuntime {
             };
 
             if should_verify {
-                if let Some(ContentPart::ToolResult { content, .. }) = tool_result_parts.last_mut()
+                if let Some(ContentPart::ToolResult { content, .. }) =
+                    tool_result_parts.iter_mut().rfind(|p| matches!(p, ContentPart::ToolResult { .. }))
                 {
                     content.push_str(
                         "\n\n[VERIFICATION REQUIRED] Review the tool output(s) above. Before proceeding:\n\

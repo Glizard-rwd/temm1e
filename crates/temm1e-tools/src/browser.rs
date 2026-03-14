@@ -17,6 +17,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chromiumoxide::browser::{Browser, BrowserConfig};
+use chromiumoxide::cdp::browser_protocol::input::{
+    DispatchMouseEventParams, DispatchMouseEventType, MouseButton,
+};
 use chromiumoxide::cdp::browser_protocol::network::{
     CookieParam, CookieSameSite, GetCookiesParams, SetCookiesParams, TimeSinceEpoch,
 };
@@ -25,7 +28,7 @@ use chromiumoxide::page::Page;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use temm1e_core::types::error::Temm1eError;
-use temm1e_core::{PathAccess, Tool, ToolContext, ToolDeclarations, ToolInput, ToolOutput};
+use temm1e_core::{PathAccess, Tool, ToolContext, ToolDeclarations, ToolInput, ToolOutput, ToolOutputImage};
 use tokio::sync::Mutex;
 
 /// Default idle timeout (seconds). Overridden by `ToolsConfig.browser_timeout_secs`.
@@ -138,6 +141,8 @@ pub struct BrowserTool {
     watchdog_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// Handle to the CDP handler task — aborted when browser is closed.
     cdp_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Last screenshot image data — consumed by runtime for vision injection.
+    last_image: Arc<std::sync::Mutex<Option<ToolOutputImage>>>,
 }
 
 impl Default for BrowserTool {
@@ -206,6 +211,7 @@ impl BrowserTool {
             shutdown,
             watchdog_handle: Mutex::new(Some(watchdog_handle)),
             cdp_handle,
+            last_image: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -524,14 +530,17 @@ impl Tool for BrowserTool {
          Actions:\n\
          - navigate: Go to a URL\n\
          - click: Click an element by CSS selector\n\
+         - click_at: Click at pixel coordinates (x, y) — use after screenshot for vision-based interaction\n\
          - type: Type text into an input field by CSS selector\n\
-         - screenshot: Capture the page as a PNG (saved to workspace)\n\
+         - screenshot: Capture the page as a PNG — the image is returned for visual analysis\n\
          - get_text: Get the visible text content of the page\n\
          - evaluate: Execute JavaScript and return the result\n\
          - get_html: Get the raw HTML of the page or an element\n\
          - save_session: Save all cookies to a named session file\n\
          - restore_session: Restore cookies from a previously saved session\n\
          - close: Close the browser when done (auto-closes after idle timeout)\n\n\
+         Vision workflow: screenshot → analyze image → click_at coordinates → repeat.\n\
+         This bypasses Shadow DOM, anti-bot CSS tricks, and hidden elements.\n\n\
          The browser runs in stealth mode with anti-detection patches applied."
     }
 
@@ -541,7 +550,7 @@ impl Tool for BrowserTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["navigate", "click", "type", "screenshot", "get_text", "evaluate", "get_html", "save_session", "restore_session", "close"],
+                    "enum": ["navigate", "click", "click_at", "type", "screenshot", "get_text", "evaluate", "get_html", "save_session", "restore_session", "close"],
                     "description": "The browser action to perform"
                 },
                 "url": {
@@ -552,9 +561,17 @@ impl Tool for BrowserTool {
                     "type": "string",
                     "description": "CSS selector for the target element (for 'click', 'type', 'get_html' actions)"
                 },
+                "x": {
+                    "type": "number",
+                    "description": "X pixel coordinate (for 'click_at' action). Get coordinates from analyzing a screenshot."
+                },
+                "y": {
+                    "type": "number",
+                    "description": "Y pixel coordinate (for 'click_at' action). Get coordinates from analyzing a screenshot."
+                },
                 "text": {
                     "type": "string",
-                    "description": "Text to type (for 'type' action)"
+                    "description": "Text to type (for 'type' action). For 'click_at', optional text to type after clicking."
                 },
                 "script": {
                     "type": "string",
@@ -676,6 +693,119 @@ impl Tool for BrowserTool {
                 })
             }
 
+            "click_at" => {
+                let x = input
+                    .arguments
+                    .get("x")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| {
+                        Temm1eError::Tool("'click_at' requires 'x' parameter".into())
+                    })?;
+                let y = input
+                    .arguments
+                    .get("y")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| {
+                        Temm1eError::Tool("'click_at' requires 'y' parameter".into())
+                    })?;
+
+                tracing::info!(x = %x, y = %y, "Browser clicking at coordinates");
+
+                // Move mouse to position
+                let move_cmd = DispatchMouseEventParams {
+                    r#type: DispatchMouseEventType::MouseMoved,
+                    x,
+                    y,
+                    modifiers: None,
+                    timestamp: None,
+                    button: None,
+                    buttons: None,
+                    click_count: None,
+                    force: None,
+                    tangential_pressure: None,
+                    tilt_x: None,
+                    tilt_y: None,
+                    twist: None,
+                    delta_x: None,
+                    delta_y: None,
+                    pointer_type: None,
+                };
+                page.execute(move_cmd)
+                    .await
+                    .map_err(|e| Temm1eError::Tool(format!("Mouse move failed: {}", e)))?;
+
+                // Mouse down
+                let down_cmd = DispatchMouseEventParams {
+                    r#type: DispatchMouseEventType::MousePressed,
+                    x,
+                    y,
+                    modifiers: None,
+                    timestamp: None,
+                    button: Some(MouseButton::Left),
+                    buttons: Some(1),
+                    click_count: Some(1),
+                    force: None,
+                    tangential_pressure: None,
+                    tilt_x: None,
+                    tilt_y: None,
+                    twist: None,
+                    delta_x: None,
+                    delta_y: None,
+                    pointer_type: None,
+                };
+                page.execute(down_cmd)
+                    .await
+                    .map_err(|e| Temm1eError::Tool(format!("Mouse down failed: {}", e)))?;
+
+                // Mouse up
+                let up_cmd = DispatchMouseEventParams {
+                    r#type: DispatchMouseEventType::MouseReleased,
+                    x,
+                    y,
+                    modifiers: None,
+                    timestamp: None,
+                    button: Some(MouseButton::Left),
+                    buttons: Some(0),
+                    click_count: Some(1),
+                    force: None,
+                    tangential_pressure: None,
+                    tilt_x: None,
+                    tilt_y: None,
+                    twist: None,
+                    delta_x: None,
+                    delta_y: None,
+                    pointer_type: None,
+                };
+                page.execute(up_cmd)
+                    .await
+                    .map_err(|e| Temm1eError::Tool(format!("Mouse up failed: {}", e)))?;
+
+                // Optional: type text after clicking (useful for input fields)
+                if let Some(text) = input.arguments.get("text").and_then(|v| v.as_str()) {
+                    // Small delay for focus
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    page.evaluate(format!(
+                        "document.activeElement && document.execCommand('insertText', false, {})",
+                        serde_json::to_string(text).unwrap_or_default()
+                    ))
+                    .await
+                    .map_err(|e| Temm1eError::Tool(format!("Type after click failed: {}", e)))?;
+                }
+
+                // Wait for any navigation/updates
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                let mut result = format!("Clicked at ({}, {})", x, y);
+                if let Some(text) = input.arguments.get("text").and_then(|v| v.as_str()) {
+                    result.push_str(&format!(" and typed {} chars", text.len()));
+                }
+
+                Ok(ToolOutput {
+                    content: result,
+                    is_error: false,
+                })
+            }
+
             "type" => {
                 let selector = input
                     .arguments
@@ -748,12 +878,25 @@ impl Tool for BrowserTool {
                     .await
                     .map_err(|e| Temm1eError::Tool(format!("Failed to save screenshot: {}", e)))?;
 
+                // Store base64 image for vision injection by the runtime.
+                // The runtime will check take_last_image() and feed it to the LLM.
+                {
+                    use base64::Engine;
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_data);
+                    if let Ok(mut img) = self.last_image.lock() {
+                        *img = Some(ToolOutputImage {
+                            media_type: "image/png".to_string(),
+                            data: b64,
+                        });
+                    }
+                }
+
                 Ok(ToolOutput {
                     content: format!(
-                        "Screenshot saved: {} ({} bytes)\nPath: {}",
+                        "Screenshot captured: {} ({} bytes). The image is now visible to you for analysis. \
+                         Use click_at with x,y coordinates to interact with elements you see.",
                         safe_name,
                         png_data.len(),
-                        save_path.display()
                     ),
                     is_error: false,
                 })
@@ -904,13 +1047,17 @@ impl Tool for BrowserTool {
 
             other => Ok(ToolOutput {
                 content: format!(
-                    "Unknown action '{}'. Valid actions: navigate, click, type, screenshot, \
+                    "Unknown action '{}'. Valid actions: navigate, click, click_at, type, screenshot, \
                      get_text, evaluate, get_html, save_session, restore_session, close",
                     other
                 ),
                 is_error: true,
             }),
         }
+    }
+
+    fn take_last_image(&self) -> Option<ToolOutputImage> {
+        self.last_image.lock().ok().and_then(|mut img| img.take())
     }
 }
 
@@ -1653,6 +1800,7 @@ mod tests {
             let expected = vec![
                 "navigate",
                 "click",
+                "click_at",
                 "type",
                 "screenshot",
                 "get_text",

@@ -726,6 +726,8 @@ proxy ollama https://ollama.com/v1 your-ollama-key";
 
 const SYSTEM_PROMPT_BASE: &str = "\
 You are TEMM1E, a cloud-native AI agent running on a remote server. \
+Your personal nickname is Tem. Your official name is TEMM1E. \
+Always refer to yourself as Tem.\n\n\
 You have full access to these tools:\n\
 - shell: run any command\n\
 - file_read / file_write / file_list: filesystem operations\n\
@@ -1341,166 +1343,8 @@ async fn decrypt_otk_blob(
 }
 
 // ── Stop-command detection ─────────────────────────────────
-fn is_stop_command(text: &str) -> bool {
-    let t = text.trim().to_lowercase();
-    const STOP_WORDS: &[&str] = &[
-        // English
-        "stop",
-        "cancel",
-        "abort",
-        "quit",
-        "halt",
-        "enough",
-        // Vietnamese
-        "dừng",
-        "dung",
-        "thôi",
-        "thoi",
-        "ngừng",
-        "ngung",
-        "hủy",
-        "huy",
-        "dẹp",
-        "dep",
-        // Spanish
-        "para",
-        "detente",
-        "basta",
-        "cancela",
-        "alto",
-        // French
-        "arrête",
-        "arrete",
-        "arrêter",
-        "arreter",
-        "annuler",
-        "suffit",
-        // German
-        "stopp",
-        "aufhören",
-        "aufhoren",
-        "abbrechen",
-        "genug",
-        // Portuguese
-        "pare",
-        "parar",
-        "cancele",
-        "cancelar",
-        "chega",
-        // Italian
-        "ferma",
-        "fermati",
-        "basta",
-        "annulla",
-        "smettila",
-        // Russian
-        "стоп",
-        "стой",
-        "хватит",
-        "отмена",
-        "довольно",
-        // Japanese
-        "止めて",
-        "やめて",
-        "やめろ",
-        "ストップ",
-        "止め",
-        "やめ",
-        // Korean
-        "멈춰",
-        "그만",
-        "중지",
-        "취소",
-        "됐어",
-        // Chinese
-        "停",
-        "停止",
-        "取消",
-        "别说了",
-        "够了",
-        "算了",
-        // Arabic
-        "توقف",
-        "الغاء",
-        "كفى",
-        "قف",
-        // Thai
-        "หยุด",
-        "ยกเลิก",
-        "พอ",
-        "เลิก",
-        // Indonesian / Malay
-        "berhenti",
-        "hentikan",
-        "batalkan",
-        "cukup",
-        "sudah",
-        // Hindi
-        "रुको",
-        "बंद",
-        "रद्द",
-        "बस",
-        "ruko",
-        "bas",
-        // Turkish
-        "dur",
-        "durdur",
-        "iptal",
-        "yeter",
-    ];
-
-    if STOP_WORDS.contains(&t.as_str()) {
-        return true;
-    }
-
-    if t.len() <= 60 {
-        const STOP_PHRASES: &[&str] = &[
-            "stop it",
-            "stop that",
-            "please stop",
-            "stop now",
-            "cancel that",
-            "shut up",
-            "dừng lại",
-            "dung lai",
-            "thôi đi",
-            "thoi di",
-            "dừng đi",
-            "dung di",
-            "ngừng lại",
-            "ngung lai",
-            "dung viet",
-            "dừng viết",
-            "thoi dung",
-            "thôi dừng",
-            "đừng nói nữa",
-            "dung noi nua",
-            "im đi",
-            "im di",
-            "para ya",
-            "deja de",
-            "arrête ça",
-            "arrete ca",
-            "hör auf",
-            "hor auf",
-            "止めてください",
-            "やめてください",
-            "停下来",
-            "不要说了",
-            "别说了",
-            "그만해",
-            "멈춰줘",
-        ];
-
-        for phrase in STOP_PHRASES {
-            if t.contains(phrase) {
-                return true;
-            }
-        }
-    }
-
-    false
-}
+// Stop detection is now fully intention-based via the LLM interceptor.
+// Only /stop remains as a hardcoded instant-kill command.
 
 /// Retry `send_message` up to 3 times with exponential backoff.
 async fn send_with_retry(
@@ -2166,6 +2010,8 @@ async fn main() -> Result<()> {
                 tx: tokio::sync::mpsc::Sender<temm1e_core::types::message::InboundMessage>,
                 interrupt: Arc<AtomicBool>,
                 is_heartbeat: Arc<AtomicBool>,
+                is_busy: Arc<AtomicBool>,
+                current_task: Arc<std::sync::Mutex<String>>,
                 cancel_token: tokio_util::sync::CancellationToken,
             }
 
@@ -2213,28 +2059,130 @@ async fn main() -> Result<()> {
                                     slot.cancel_token.cancel();
                                 }
 
-                                let is_stop = inbound
-                                    .text
-                                    .as_deref()
-                                    .map(is_stop_command)
+                                // /stop is the only hardcoded instant-kill.
+                                // All other cancel intent is handled by the
+                                // LLM interceptor (intention-based, not word matching).
+                                let is_slash_stop = inbound.text.as_deref()
+                                    .map(|t| t.trim().eq_ignore_ascii_case("/stop"))
                                     .unwrap_or(false);
 
-                                if is_stop {
+                                if is_slash_stop {
                                     tracing::info!(
                                         chat_id = %chat_id,
-                                        "Stop command detected — interrupting active task"
+                                        "/stop command — interrupting active task"
                                     );
                                     slot.interrupt.store(true, Ordering::Relaxed);
                                     slot.cancel_token.cancel();
                                     continue;
                                 }
 
-                                if let Some(text) = inbound.text.as_deref() {
-                                    if let Ok(mut pq) = pending_clone.lock() {
-                                        pq.entry(chat_id.clone())
-                                            .or_default()
-                                            .push(text.to_string());
+                                // Only intercept when worker is actively processing.
+                                // When idle (waiting on chat_rx), let the message
+                                // fall through to the worker channel.
+                                if slot.is_busy.load(Ordering::Relaxed) {
+                                    // Push to pending queue ONLY when busy — the runtime
+                                    // injects these into tool results so the working LLM
+                                    // sees them. If not busy, the message goes directly
+                                    // to the worker channel below.
+                                    if let Some(text) = inbound.text.as_deref() {
+                                        if let Ok(mut pq) = pending_clone.lock() {
+                                            pq.entry(chat_id.clone())
+                                                .or_default()
+                                                .push(text.to_string());
+                                        }
                                     }
+                                    // LLM interceptor — runs on a separate task.
+                                    // Can chat, give status, or cancel the active task.
+                                    let icpt_sender = sender.clone();
+                                    let icpt_chat_id = chat_id.clone();
+                                    let icpt_msg_id = inbound.id.clone();
+                                    let icpt_msg_text = inbound.text.clone().unwrap_or_default();
+                                    let icpt_interrupt = slot.interrupt.clone();
+                                    let icpt_cancel = slot.cancel_token.clone();
+                                    let icpt_task = slot.current_task.clone();
+                                    let icpt_agent_state = agent_state_clone.clone();
+                                    tokio::spawn(async move {
+                                        let task_desc = icpt_task.lock()
+                                            .map(|t| t.clone())
+                                            .unwrap_or_default();
+
+                                        // Get provider + model from the active agent
+                                        let agent_guard = icpt_agent_state.read().await;
+                                        let Some(agent) = agent_guard.as_ref() else { return; };
+                                        let provider = agent.provider_arc();
+                                        let model = agent.model().to_string();
+                                        drop(agent_guard);
+
+                                        let soul = build_system_prompt();
+                                        let request = temm1e_core::types::message::CompletionRequest {
+                                            model,
+                                            system: Some(format!(
+                                                "{}\n\n\
+                                                 === INTERCEPTOR MODE ===\n\
+                                                 You are running as Temm1e's INTERCEPTOR right now. Your main self is busy \
+                                                 working on a task. The user sent a message while that task is running.\n\n\
+                                                 Current task: \"{}\"\n\n\
+                                                 Interceptor rules:\n\
+                                                 - Keep it SHORT (1-3 sentences max)\n\
+                                                 - If the user wants to CANCEL/STOP the task, include the exact token [CANCEL] at the very end of your response\n\
+                                                 - If the user asks about progress, explain what the task involves based on its description\n\
+                                                 - If the user is chatting casually, respond warmly\n\
+                                                 - NEVER use [CANCEL] unless the user clearly wants to stop\n\
+                                                 === END INTERCEPTOR ===",
+                                                soul, task_desc
+                                            )),
+                                            messages: vec![
+                                                temm1e_core::types::message::ChatMessage {
+                                                    role: temm1e_core::types::message::Role::User,
+                                                    content: temm1e_core::types::message::MessageContent::Text(icpt_msg_text),
+                                                },
+                                            ],
+                                            tools: vec![],
+                                            max_tokens: None,
+                                            temperature: Some(0.7),
+                                        };
+
+                                        match provider.complete(request).await {
+                                            Ok(resp) => {
+                                                let mut text = resp.content.iter()
+                                                    .filter_map(|p| match p {
+                                                        temm1e_core::types::message::ContentPart::Text { text } => Some(text.as_str()),
+                                                        _ => None,
+                                                    })
+                                                    .collect::<Vec<_>>()
+                                                    .join("");
+
+                                                let should_cancel = text.contains("[CANCEL]");
+                                                text = text.replace("[CANCEL]", "").trim().to_string();
+
+                                                if !text.is_empty() {
+                                                    let reply = temm1e_core::types::message::OutboundMessage {
+                                                        chat_id: icpt_chat_id.clone(),
+                                                        text,
+                                                        reply_to: Some(icpt_msg_id),
+                                                        parse_mode: None,
+                                                    };
+                                                    let _ = icpt_sender.send_message(reply).await;
+                                                }
+
+                                                if should_cancel {
+                                                    icpt_interrupt.store(true, Ordering::Relaxed);
+                                                    icpt_cancel.cancel();
+                                                    tracing::info!(
+                                                        chat_id = %icpt_chat_id,
+                                                        "Interceptor cancelled active task"
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    error = %e,
+                                                    "Interceptor LLM call failed — skipping"
+                                                );
+                                            }
+                                        }
+                                    });
+                                    continue;
                                 }
                             }
                         }
@@ -2260,7 +2208,12 @@ async fn main() -> Result<()> {
 
                             let interrupt = Arc::new(AtomicBool::new(false));
                             let is_heartbeat = Arc::new(AtomicBool::new(false));
+                            let is_busy = Arc::new(AtomicBool::new(false));
+                            let current_task: Arc<std::sync::Mutex<String>> = Arc::new(std::sync::Mutex::new(String::new()));
                             let cancel_token = tokio_util::sync::CancellationToken::new();
+                            let is_busy_clone = is_busy.clone();
+                            let current_task_clone = current_task.clone();
+                            let self_tx = chat_tx.clone();
 
                             let agent_state = agent_state_clone.clone();
                             let memory = memory_clone.clone();
@@ -3275,6 +3228,14 @@ Just type a message to chat with the AI agent.",
                                         });
 
                                         // ── Panic-guarded message processing ─────────
+                                        // Mark worker as busy AFTER command interception.
+                                        // Commands handled above use `continue` and never
+                                        // reach here, so is_busy stays false for them.
+                                        is_busy_clone.store(true, Ordering::Relaxed);
+                                        if let Ok(mut ct) = current_task_clone.lock() {
+                                            *ct = msg.text.as_deref().unwrap_or("").to_string();
+                                        }
+
                                         // Wraps process_message in catch_unwind so a panic
                                         // in context building, tool execution, or provider
                                         // parsing doesn't kill the per-chat worker loop.
@@ -3290,7 +3251,9 @@ Just type a message to chat with the AI agent.",
                                         match process_result {
                                             Ok(Ok((mut reply, turn_usage))) => {
                                                 reply.text = censor_secrets(&reply.text);
-                                                send_with_retry(&*sender, reply).await;
+                                                if !reply.text.trim().is_empty() {
+                                                    send_with_retry(&*sender, reply).await;
+                                                }
 
                                                 // Record usage
                                                 let record = temm1e_core::UsageRecord {
@@ -3644,12 +3607,41 @@ Just type a message to chat with the AI agent.",
                                         }
                                     }
 
-                                    // Clear active state and pending queue
-                                    is_heartbeat_clone.store(false, Ordering::Relaxed);
-                                    interrupt_clone.store(false, Ordering::Relaxed);
+                                    // Re-queue any unconsumed pending messages as
+                                    // standalone requests, then clear active state.
                                     if let Ok(mut pq) = pending_for_worker.lock() {
-                                        pq.remove(&worker_chat_id);
+                                        if let Some(pending_msgs) = pq.remove(&worker_chat_id) {
+                                            if !pending_msgs.is_empty() {
+                                                tracing::info!(
+                                                    count = pending_msgs.len(),
+                                                    chat_id = %worker_chat_id,
+                                                    "Re-queuing unconsumed pending messages"
+                                                );
+                                                for text in pending_msgs {
+                                                    let synthetic = temm1e_core::types::message::InboundMessage {
+                                                        id: uuid::Uuid::new_v4().to_string(),
+                                                        channel: msg.channel.clone(),
+                                                        chat_id: worker_chat_id.clone(),
+                                                        user_id: msg.user_id.clone(),
+                                                        username: None,
+                                                        text: Some(text),
+                                                        timestamp: chrono::Utc::now(),
+                                                        reply_to: None,
+                                                        attachments: vec![],
+                                                    };
+                                                    if self_tx.try_send(synthetic).is_err() {
+                                                        tracing::warn!(
+                                                            chat_id = %worker_chat_id,
+                                                            "Failed to re-queue pending message — channel full"
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
+                                    is_heartbeat_clone.store(false, Ordering::Relaxed);
+                                    is_busy_clone.store(false, Ordering::Relaxed);
+                                    interrupt_clone.store(false, Ordering::Relaxed);
                                     }).catch_unwind().await;
 
                                     // ── Outer panic safety net ─────────────────
@@ -3683,6 +3675,7 @@ Just type a message to chat with the AI agent.",
                                         let _ = sender.send_message(error_reply).await;
                                         // Ensure cleanup in case the panic skipped it
                                         is_heartbeat_clone.store(false, Ordering::Relaxed);
+                                        is_busy_clone.store(false, Ordering::Relaxed);
                                         interrupt_clone.store(false, Ordering::Relaxed);
                                         if let Ok(mut pq) = pending_for_worker.lock() {
                                             pq.remove(&worker_chat_id);
@@ -3691,7 +3684,7 @@ Just type a message to chat with the AI agent.",
                                 }
                             });
 
-                            ChatSlot { tx: chat_tx, interrupt, is_heartbeat, cancel_token }
+                            ChatSlot { tx: chat_tx, interrupt, is_heartbeat, is_busy, current_task, cancel_token }
                         });
 
                         // Send message into the chat's dedicated queue.

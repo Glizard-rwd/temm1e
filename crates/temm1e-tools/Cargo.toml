@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "Tool integrations for TEMM1E agents"
 
 [features]
-browser = ["dep:chromiumoxide", "dep:futures"]
+browser = ["dep:chromiumoxide", "dep:futures", "dep:base64"]
 
 [dependencies]
 temm1e-core.workspace = true
@@ -24,6 +24,7 @@ dirs.workspace = true
 # Optional: Browser automation
 chromiumoxide = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
