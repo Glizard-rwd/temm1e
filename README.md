@@ -484,7 +484,7 @@ Requires Rust 1.82+ and Chrome/Chromium (for the browser tool).
 
 ---
 
-<details>
+<details open>
 <summary><strong>Release Timeline</strong> — every version from first breath to now</summary>
 
 ```
