@@ -175,7 +175,9 @@ async fn test_01_data_collection_1000_pairs() {
             messages_json: synthetic_messages(category, i),
             system_prompt: Some("You are a helpful AI assistant.".to_string()),
             tools_json: if category == "tool-use" {
-                Some(r#"[{"name":"shell_exec","description":"Execute shell commands"}]"#.to_string())
+                Some(
+                    r#"[{"name":"shell_exec","description":"Execute shell commands"}]"#.to_string(),
+                )
             } else {
                 None
             },
@@ -205,9 +207,7 @@ async fn test_01_data_collection_1000_pairs() {
                 .on_signal(&conv_id, QualitySignal::UserContinued)
                 .await;
         } else if i % 10 < 9 {
-            engine
-                .on_signal(&conv_id, QualitySignal::UserRetried)
-                .await;
+            engine.on_signal(&conv_id, QualitySignal::UserRetried).await;
         }
         // Last 10%: no signal (stays at default Beta(2,2) = 0.5)
     }
@@ -373,8 +373,14 @@ async fn test_02_quality_scoring_beta_binomial() {
         beta,
         scores.last().unwrap()
     );
-    println!("  After 1 neg:   Beta({:.0},{:.0}) = {:.4}", alpha_neg, beta_neg, neg_score);
-    println!("  Variance:      {:.6} -> {:.6} (evidence reduces uncertainty)", initial_var, var_after);
+    println!(
+        "  After 1 neg:   Beta({:.0},{:.0}) = {:.4}",
+        alpha_neg, beta_neg, neg_score
+    );
+    println!(
+        "  Variance:      {:.6} -> {:.6} (evidence reduces uncertainty)",
+        initial_var, var_after
+    );
     println!("  PASS: Beta-Binomial scoring verified");
     println!();
 }
@@ -538,10 +544,7 @@ async fn test_04_sprt_graduation() {
     // ── Test 4: Reset and reuse ──────────────────────────────────────
     sprt.reset();
     assert_eq!(sprt.n(), 0, "Reset should zero observation count");
-    assert!(
-        sprt.lambda().abs() < 1e-12,
-        "Reset should zero lambda"
-    );
+    assert!(sprt.lambda().abs() < 1e-12, "Reset should zero lambda");
     assert_eq!(
         sprt.decision(),
         SprtDecision::Continue,
@@ -613,10 +616,7 @@ async fn test_05_cusum_drift_detection() {
         }
     }
 
-    assert_eq!(
-        in_control_alarms, 0,
-        "In-control process should not alarm"
-    );
+    assert_eq!(in_control_alarms, 0, "In-control process should not alarm");
     assert!(
         cusum_good.statistic().abs() < 1e-10,
         "In-control CUSUM statistic should be ~0"
@@ -677,20 +677,26 @@ async fn test_05_cusum_drift_detection() {
         severe_n,
         alarm_n
     );
-    println!(
-        "  Severe (-1.0 shift): alarm at sample {}",
-        severe_n
-    );
+    println!("  Severe (-1.0 shift): alarm at sample {}", severe_n);
 
     // ── Single outlier: no alarm ─────────────────────────────────────
     let mut cusum_outlier = Cusum::new(1.0, 0.1, 5.0, false);
-    assert!(!cusum_outlier.observe(-3.0), "Single outlier should not alarm");
-    assert!(cusum_outlier.statistic() > 0.0, "Outlier should raise statistic");
+    assert!(
+        !cusum_outlier.observe(-3.0),
+        "Single outlier should not alarm"
+    );
+    assert!(
+        cusum_outlier.statistic() > 0.0,
+        "Outlier should raise statistic"
+    );
     // Return to normal — S decays back to 0
     for _ in 0..100 {
         cusum_outlier.observe(1.0);
     }
-    assert!(cusum_outlier.statistic().abs() < 1e-10, "Normal obs should reset S");
+    assert!(
+        cusum_outlier.statistic().abs() < 1e-10,
+        "Normal obs should reset S"
+    );
 
     // ── FIR: faster detection ────────────────────────────────────────
     let mut cusum_fir = Cusum::new(1.0, 0.1, 5.0, true);
@@ -743,7 +749,11 @@ async fn test_05_cusum_drift_detection() {
 async fn test_06_wilson_score_interval() {
     // ── High accuracy, large sample ──────────────────────────────────
     let (lower_95, upper_95) = wilson_interval(95, 100, 0.99);
-    assert!(lower_95 > 0.85, "95/100 at 99% CI: lower should be > 0.85, got {:.4}", lower_95);
+    assert!(
+        lower_95 > 0.85,
+        "95/100 at 99% CI: lower should be > 0.85, got {:.4}",
+        lower_95
+    );
     assert!(upper_95 <= 1.0, "Upper bound should be <= 1.0");
 
     // ── Graduation gate: lower bound >= threshold ────────────────────
@@ -771,10 +781,7 @@ async fn test_06_wilson_score_interval() {
         "Perfect score lower should be > 0.93, got {:.4}",
         lower_perfect
     );
-    assert!(
-        upper_perfect <= 1.0,
-        "Perfect score upper should be <= 1.0"
-    );
+    assert!(upper_perfect <= 1.0, "Perfect score upper should be <= 1.0");
 
     // ── Zero score ───────────────────────────────────────────────────
     let (lower_zero, upper_zero) = wilson_interval(0, 100, 0.99);
@@ -873,10 +880,7 @@ async fn test_07_embedding_judge() {
 
     // Needs embedding (semantically similar but different strings)
     assert_eq!(
-        cheap_equivalence_check(
-            "The answer is 42.",
-            "42 is the answer to the question."
-        ),
+        cheap_equivalence_check("The answer is 42.", "42 is the answer to the question."),
         None
     );
 
@@ -942,7 +946,10 @@ async fn test_08_behavior_judge() {
     let (agree_tf, signal_tf) =
         behavior_observation("That's wrong", Some("What is the weather"), 20, true);
     assert!(!agree_tf);
-    assert_eq!(signal_tf, "tool_failure", "Tool failure has highest priority");
+    assert_eq!(
+        signal_tf, "tool_failure",
+        "Tool failure has highest priority"
+    );
 
     // ── Signal mapping ───────────────────────────────────────────────
     assert!(signal_to_observation(QualitySignal::UserContinued));
@@ -1043,7 +1050,10 @@ async fn test_09_state_machine_transitions() {
 
     let updated = store.get_tier("simple").await.unwrap();
     assert_eq!(updated.state, TierState::Shadowing);
-    assert!(updated.sprt_lambda.abs() < 1e-12, "SPRT should reset on shadow entry");
+    assert!(
+        updated.sprt_lambda.abs() < 1e-12,
+        "SPRT should reset on shadow entry"
+    );
 
     // ── Simulate: SPRT observations in Shadowing ─────────────────────
     let mut sprt = Sprt::new(0.85, 0.95, 0.05, 0.10, 200);
@@ -1078,7 +1088,10 @@ async fn test_09_state_machine_transitions() {
         let graduated = store.get_tier("simple").await.unwrap();
         assert_eq!(graduated.state, TierState::Graduated);
         assert!(graduated.last_graduated_at.is_some());
-        assert!((graduated.cusum_s - 2.5).abs() < 1e-10, "CUSUM FIR should start at 2.5");
+        assert!(
+            (graduated.cusum_s - 2.5).abs() < 1e-10,
+            "CUSUM FIR should start at 2.5"
+        );
     }
 
     // ── Simulate: Graduated → Collecting (CUSUM alarm) ───────────────
@@ -1131,7 +1144,10 @@ async fn test_09_state_machine_transitions() {
     for (tier, from, to) in &transitions {
         println!("    {} : {} -> {}", tier, from, to);
     }
-    println!("  SPRT observations: {} (decision: {:?})", obs_count, decision);
+    println!(
+        "  SPRT observations: {} (decision: {:?})",
+        obs_count, decision
+    );
     println!("  PASS: State machine transitions verified");
     println!();
 }
@@ -1146,10 +1162,16 @@ async fn test_10_domain_classification() {
 
     // ── Coding detection ─────────────────────────────────────────────
     let code_msgs = r#"[{"role":"user","content":"Write a function in Rust"}]"#;
-    assert_eq!(EigenTuneCollector::classify_domain(code_msgs, &None), "coding");
+    assert_eq!(
+        EigenTuneCollector::classify_domain(code_msgs, &None),
+        "coding"
+    );
 
     let code_msgs2 = r#"[{"role":"user","content":"Here is my ```python\ndef foo():\n  pass```"}]"#;
-    assert_eq!(EigenTuneCollector::classify_domain(code_msgs2, &None), "coding");
+    assert_eq!(
+        EigenTuneCollector::classify_domain(code_msgs2, &None),
+        "coding"
+    );
 
     // ── Reasoning detection ──────────────────────────────────────────
     let reason_msgs = r#"[{"role":"user","content":"Explain why the sky is blue"}]"#;
@@ -1175,7 +1197,10 @@ async fn test_10_domain_classification() {
     // ── Tool-use detection ───────────────────────────────────────────
     let tool_msgs = r#"[{"role":"user","content":"tool_use command"}]"#;
     let tools = Some(r#"[{"name":"shell"}]"#.to_string());
-    assert_eq!(EigenTuneCollector::classify_domain(tool_msgs, &tools), "tool-use");
+    assert_eq!(
+        EigenTuneCollector::classify_domain(tool_msgs, &tools),
+        "tool-use"
+    );
 
     // ── Analysis detection ───────────────────────────────────────────
     let analysis_msgs = r#"[{"role":"user","content":"Summarize the data trends"}]"#;
@@ -1295,7 +1320,10 @@ async fn test_11_full_summary_report() {
     assert!(h0_n > 0, "SPRT H0 should converge");
     assert!(in_control_count > 100, "In-control ARL should be > 100");
     assert!(drift_n > 0, "Drift detection should converge");
-    assert!(score_mean > 0.5, "Mean score with 80% positive should be > 0.5");
+    assert!(
+        score_mean > 0.5,
+        "Mean score with 80% positive should be > 0.5"
+    );
     assert!(j > 0.75, "Entropy should pass gate");
 
     // ── Print the full report ────────────────────────────────────────
@@ -1320,18 +1348,27 @@ async fn test_11_full_summary_report() {
     println!("  DIVERSITY GATE (Shannon Entropy)");
     println!("    Normalized entropy J:     {:.4}", j);
     println!("    Gate threshold:           0.75");
-    println!("    Gate passed:              {}", if j >= 0.75 { "YES" } else { "NO" });
+    println!(
+        "    Gate passed:              {}",
+        if j >= 0.75 { "YES" } else { "NO" }
+    );
     println!();
     println!("  SPRT (Sequential Probability Ratio Test)");
     println!("    Parameters:               p0=0.85, p1=0.95, alpha=0.05, beta=0.10");
     println!("    H1 (graduate, 96%):       {} samples", h1_n);
     println!("    H0 (demote, 80%):         {} samples", h0_n);
-    println!("    Wald boundaries:          A = ln(0.9/0.05) = {:.4}, B = ln(0.1/0.95) = {:.4}",
-        (0.9_f64 / 0.05).ln(), (0.1_f64 / 0.95).ln());
+    println!(
+        "    Wald boundaries:          A = ln(0.9/0.05) = {:.4}, B = ln(0.1/0.95) = {:.4}",
+        (0.9_f64 / 0.05).ln(),
+        (0.1_f64 / 0.95).ln()
+    );
     println!();
     println!("  CUSUM (Cumulative Sum Control Chart)");
     println!("    Parameters:               target=0.95, k=0.5, h=5.0");
-    println!("    In-control ARL (95%):     > {} samples (no false alarm)", in_control_count);
+    println!(
+        "    In-control ARL (95%):     > {} samples (no false alarm)",
+        in_control_count
+    );
     println!("    Drift detection (80%):    {} samples", drift_n);
     println!();
     println!("  STATE MACHINE");
@@ -1342,8 +1379,14 @@ async fn test_11_full_summary_report() {
     println!("    Independent tiers:        3 (Simple, Standard, Complex)");
     println!();
     println!("  EVALUATION GATES");
-    println!("    Wilson score (99% CI):    97/100 -> lower = {:.4}", wilson_lower(97, 100, 0.99));
-    println!("    Wilson score (99% CI):    80/100 -> lower = {:.4}", wilson_lower(80, 100, 0.99));
+    println!(
+        "    Wilson score (99% CI):    97/100 -> lower = {:.4}",
+        wilson_lower(97, 100, 0.99)
+    );
+    println!(
+        "    Wilson score (99% CI):    80/100 -> lower = {:.4}",
+        wilson_lower(80, 100, 0.99)
+    );
     println!("    Graduation threshold:     0.95 (configurable)");
     println!();
     println!("  JUDGES");

@@ -246,8 +246,7 @@ mod tests {
         let sim = cosine_similarity(&current, &previous);
         assert!(sim > RETRY_EMBEDDING_THRESHOLD);
 
-        let result =
-            behavior_observation_embedding(&current, Some(&previous), &[], 30);
+        let result = behavior_observation_embedding(&current, Some(&previous), &[], 30);
         assert_eq!(result, Some((false, "semantic_retry")));
     }
 
@@ -257,8 +256,7 @@ mod tests {
         let previous = vec![0.85, 0.15, 0.0, 0.0];
 
         // 120 seconds elapsed — beyond the 60s window
-        let result =
-            behavior_observation_embedding(&current, Some(&previous), &[], 120);
+        let result = behavior_observation_embedding(&current, Some(&previous), &[], 120);
         assert_eq!(result, None); // No retry detected — outside time window
     }
 
@@ -270,12 +268,7 @@ mod tests {
         let sim = cosine_similarity(&current, &rejection_proto);
         assert!(sim > REJECTION_EMBEDDING_THRESHOLD);
 
-        let result = behavior_observation_embedding(
-            &current,
-            None,
-            &[rejection_proto],
-            0,
-        );
+        let result = behavior_observation_embedding(&current, None, &[rejection_proto], 0);
         assert_eq!(result, Some((false, "semantic_rejection")));
     }
 
@@ -284,12 +277,7 @@ mod tests {
         // User message NOT similar to rejection prototypes
         let current = vec![1.0, 0.0, 0.0, 0.0];
         let rejection_proto = vec![0.0, 1.0, 0.0, 0.0]; // orthogonal
-        let result = behavior_observation_embedding(
-            &current,
-            None,
-            &[rejection_proto],
-            0,
-        );
+        let result = behavior_observation_embedding(&current, None, &[rejection_proto], 0);
         assert_eq!(result, None); // No rejection
     }
 
@@ -320,7 +308,7 @@ mod tests {
 
         let (agree, signal) = behavior_observation_tiered(
             "Tell me the temperature outside",      // different words
-            Some("What's the weather like today?"),  // different words
+            Some("What's the weather like today?"), // different words
             30,
             false,
             Some(&current_emb),
@@ -337,7 +325,7 @@ mod tests {
         let rejection_proto = vec![0.81, 0.59, 0.0, 0.0];
 
         let (agree, signal) = behavior_observation_tiered(
-            "That response was completely useless",  // no keyword match
+            "That response was completely useless", // no keyword match
             None,
             0,
             false,

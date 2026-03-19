@@ -214,8 +214,10 @@ pub async fn classify_message(
     // Split: last message is the CURRENT one, prior messages are context
     let (context, current) = if text_messages.len() > 1 {
         let split = text_messages.len() - 1;
-        // Take at most 2 prior messages for context (enough for "what did I just say?" style queries)
-        let ctx_start = split.saturating_sub(2);
+        // Take at most 15 prior messages for context so Chat responses retain
+        // conversational memory. The explicit [NEW message to classify] marker
+        // (injected below) prevents the classifier from conflating older messages.
+        let ctx_start = split.saturating_sub(15);
         (&text_messages[ctx_start..split], &text_messages[split..])
     } else {
         (&text_messages[..0], &text_messages[..])

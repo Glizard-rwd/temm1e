@@ -6,12 +6,12 @@
 //!
 //! Run with: cargo test -p temm1e-distill --test proof_of_pipeline -- --nocapture
 
+use std::sync::Arc;
 use temm1e_distill::collector::{EigenTuneCollector, EigenTunePairData};
 use temm1e_distill::config::EigenTuneConfig;
 use temm1e_distill::stats::{cusum::Cusum, entropy, sprt::Sprt, wilson};
 use temm1e_distill::store::EigenTuneStore;
 use temm1e_distill::types::QualitySignal;
-use std::sync::Arc;
 
 /// Real multi-turn conversations that a TEMM1E user would have.
 fn real_conversations() -> Vec<(Vec<serde_json::Value>, &'static str, &'static str)> {
@@ -165,7 +165,12 @@ async fn proof_01_real_data_collection() {
         };
 
         let pair_id = collector.collect(data).await.unwrap();
-        println!("  ✓ Pair {} | {} | {}", pair_id.chars().take(8).collect::<String>(), complexity, _domain);
+        println!(
+            "  ✓ Pair {} | {} | {}",
+            pair_id.chars().take(8).collect::<String>(),
+            complexity,
+            _domain
+        );
 
         // Simulate quality signals
         if i % 3 != 2 {
@@ -233,7 +238,8 @@ async fn proof_02_chatml_jsonl_export() {
 
         let data = EigenTunePairData {
             messages_json,
-            system_prompt: messages.first()
+            system_prompt: messages
+                .first()
                 .and_then(|m| m.get("content").and_then(|c| c.as_str()))
                 .map(String::from),
             tools_json: None,
@@ -249,7 +255,10 @@ async fn proof_02_chatml_jsonl_export() {
         };
         collector.collect(data).await.unwrap();
         // All get positive signal
-        collector.observe_signal(&format!("conv_{}", i), QualitySignal::UserContinued).await.unwrap();
+        collector
+            .observe_signal(&format!("conv_{}", i), QualitySignal::UserContinued)
+            .await
+            .unwrap();
     }
 
     // Export as ChatML JSONL
@@ -291,24 +300,35 @@ async fn proof_02_chatml_jsonl_export() {
 
         // Must have "messages" array
         let messages = parsed.get("messages").expect("Missing 'messages' key");
-        assert!(messages.is_array(), "Line {}: 'messages' is not an array", i);
+        assert!(
+            messages.is_array(),
+            "Line {}: 'messages' is not an array",
+            i
+        );
 
         let msgs = messages.as_array().unwrap();
         assert!(!msgs.is_empty(), "Line {}: empty messages array", i);
 
         // Each message must have "role" and "content"
         for msg in msgs {
-            assert!(msg.get("role").is_some(), "Line {}: message missing 'role'", i);
+            assert!(
+                msg.get("role").is_some(),
+                "Line {}: message missing 'role'",
+                i
+            );
             let role = msg["role"].as_str().unwrap();
             assert!(
                 ["system", "user", "assistant", "tool"].contains(&role),
-                "Line {}: invalid role '{}'", i, role
+                "Line {}: invalid role '{}'",
+                i,
+                role
             );
         }
 
         // Print first 3 lines as sample
         if i < 3 {
-            let first_user = msgs.iter()
+            let first_user = msgs
+                .iter()
                 .find(|m| m["role"] == "user")
                 .and_then(|m| m["content"].as_str())
                 .unwrap_or("(no user message)");
@@ -326,7 +346,10 @@ async fn proof_02_chatml_jsonl_export() {
     println!("\n--- Export Validation ---");
     println!("Total lines: {}", lines.len());
     println!("Valid ChatML: {}/{}", valid_count, lines.len());
-    println!("File size: {} bytes", std::fs::metadata(export_path).unwrap().len());
+    println!(
+        "File size: {} bytes",
+        std::fs::metadata(export_path).unwrap().len()
+    );
 
     // Verify format compatibility
     println!("\n--- Format Compatibility ---");
@@ -336,7 +359,7 @@ async fn proof_02_chatml_jsonl_export() {
     println!("✓ Axolotl chat_template: compatible (field_messages=messages)");
 
     assert_eq!(valid_count, lines.len());
-    assert!(lines.len() > 0);
+    assert!(!lines.is_empty());
 
     println!("\n✓ PROOF: Real ChatML JSONL exported and validated\n");
 }
@@ -373,16 +396,28 @@ async fn proof_03_quality_pipeline() {
         match i % 4 {
             0 => {
                 // High quality: multiple positive signals
-                collector.observe_signal(&format!("conv_{}", i), QualitySignal::UserContinued).await.unwrap();
-                collector.observe_signal(&format!("conv_{}", i), QualitySignal::ToolCallSucceeded).await.unwrap();
+                collector
+                    .observe_signal(&format!("conv_{}", i), QualitySignal::UserContinued)
+                    .await
+                    .unwrap();
+                collector
+                    .observe_signal(&format!("conv_{}", i), QualitySignal::ToolCallSucceeded)
+                    .await
+                    .unwrap();
             }
             1 => {
                 // Medium quality: one positive
-                collector.observe_signal(&format!("conv_{}", i), QualitySignal::UserContinued).await.unwrap();
+                collector
+                    .observe_signal(&format!("conv_{}", i), QualitySignal::UserContinued)
+                    .await
+                    .unwrap();
             }
             2 => {
                 // Low quality: negative signal
-                collector.observe_signal(&format!("conv_{}", i), QualitySignal::UserRetried).await.unwrap();
+                collector
+                    .observe_signal(&format!("conv_{}", i), QualitySignal::UserRetried)
+                    .await
+                    .unwrap();
             }
             _ => {
                 // No signal (default quality 0.5)
@@ -395,21 +430,37 @@ async fn proof_03_quality_pipeline() {
     let all_pairs_standard = store.get_pairs_for_tier("standard", 0.0).await.unwrap();
     let all_pairs_complex = store.get_pairs_for_tier("complex", 0.0).await.unwrap();
 
-    let all_scores: Vec<f64> = all_pairs_simple.iter()
+    let all_scores: Vec<f64> = all_pairs_simple
+        .iter()
         .chain(all_pairs_standard.iter())
         .chain(all_pairs_complex.iter())
         .filter_map(|p| p.quality_score)
         .collect();
 
     let high_quality = all_scores.iter().filter(|&&s| s >= 0.6).count();
-    let medium_quality = all_scores.iter().filter(|&&s| s >= 0.4 && s < 0.6).count();
+    let medium_quality = all_scores
+        .iter()
+        .filter(|&&s| (0.4..0.6).contains(&s))
+        .count();
     let low_quality = all_scores.iter().filter(|&&s| s < 0.4).count();
 
     println!("--- Quality Distribution ---");
     println!("Total scored: {}", all_scores.len());
-    println!("High (≥0.6):   {} ({:.0}%)", high_quality, high_quality as f64 / all_scores.len() as f64 * 100.0);
-    println!("Medium (0.4-0.6): {} ({:.0}%)", medium_quality, medium_quality as f64 / all_scores.len() as f64 * 100.0);
-    println!("Low (<0.4):    {} ({:.0}%)", low_quality, low_quality as f64 / all_scores.len() as f64 * 100.0);
+    println!(
+        "High (≥0.6):   {} ({:.0}%)",
+        high_quality,
+        high_quality as f64 / all_scores.len() as f64 * 100.0
+    );
+    println!(
+        "Medium (0.4-0.6): {} ({:.0}%)",
+        medium_quality,
+        medium_quality as f64 / all_scores.len() as f64 * 100.0
+    );
+    println!(
+        "Low (<0.4):    {} ({:.0}%)",
+        low_quality,
+        low_quality as f64 / all_scores.len() as f64 * 100.0
+    );
 
     if !all_scores.is_empty() {
         let mean: f64 = all_scores.iter().sum::<f64>() / all_scores.len() as f64;
@@ -427,7 +478,7 @@ async fn proof_03_quality_pipeline() {
     let j = entropy::normalized_entropy(&counts);
     println!("\nDataset diversity: J = {:.3} (threshold: 0.75)", j);
 
-    assert!(all_scores.len() > 0);
+    assert!(!all_scores.is_empty());
     assert!(high_quality > 0);
 
     println!("\n✓ PROOF: Quality scoring pipeline produces real scored data\n");
@@ -441,7 +492,13 @@ async fn proof_04_graduation_pipeline() {
 
     // Prove SPRT graduation with real-world-like data
     let config = EigenTuneConfig::default();
-    let mut sprt = Sprt::new(config.sprt_p0, config.sprt_p1, config.sprt_alpha, config.sprt_beta, config.sprt_max_samples as u32);
+    let mut sprt = Sprt::new(
+        config.sprt_p0,
+        config.sprt_p1,
+        config.sprt_alpha,
+        config.sprt_beta,
+        config.sprt_max_samples as u32,
+    );
 
     println!("--- SPRT Graduation Test ---");
     println!("H0: accuracy < {}", config.sprt_p0);
@@ -456,11 +513,19 @@ async fn proof_04_graduation_pipeline() {
         let decision = sprt.observe(agree);
         match decision {
             temm1e_distill::stats::sprt::SprtDecision::AcceptH1 => {
-                println!("  → GRADUATED after {} samples (Λ = {:.3})", samples, sprt.lambda());
+                println!(
+                    "  → GRADUATED after {} samples (Λ = {:.3})",
+                    samples,
+                    sprt.lambda()
+                );
                 break;
             }
             temm1e_distill::stats::sprt::SprtDecision::AcceptH0 => {
-                println!("  → DEMOTED after {} samples (Λ = {:.3})", samples, sprt.lambda());
+                println!(
+                    "  → DEMOTED after {} samples (Λ = {:.3})",
+                    samples,
+                    sprt.lambda()
+                );
                 break;
             }
             _ => {}
@@ -473,28 +538,57 @@ async fn proof_04_graduation_pipeline() {
 
     // Prove CUSUM drift detection
     println!("\n--- CUSUM Drift Detection Test ---");
-    let mut cusum = Cusum::new(config.graduation_accuracy, config.cusum_k, config.cusum_threshold, false);
+    let mut cusum = Cusum::new(
+        config.graduation_accuracy,
+        config.cusum_k,
+        config.cusum_threshold,
+        false,
+    );
 
     // Phase 1: In-control (95% positive)
     let mut in_control_samples = 0;
     for _ in 0..200 {
         in_control_samples += 1;
-        let value = if rand::random::<f64>() < 0.95 { 1.0 } else { 0.0 };
+        let value = if rand::random::<f64>() < 0.95 {
+            1.0
+        } else {
+            0.0
+        };
         if cusum.observe(value) {
-            println!("  ✗ False alarm at sample {} (unexpected)", in_control_samples);
+            println!(
+                "  ✗ False alarm at sample {} (unexpected)",
+                in_control_samples
+            );
             break;
         }
     }
-    println!("  ✓ In-control: {} samples, no alarm (S = {:.3})", in_control_samples, cusum.statistic());
+    println!(
+        "  ✓ In-control: {} samples, no alarm (S = {:.3})",
+        in_control_samples,
+        cusum.statistic()
+    );
 
     // Phase 2: Drift (80% positive — 15% drop)
-    cusum = Cusum::new(config.graduation_accuracy, config.cusum_k, config.cusum_threshold, false);
+    cusum = Cusum::new(
+        config.graduation_accuracy,
+        config.cusum_k,
+        config.cusum_threshold,
+        false,
+    );
     let mut drift_samples = 0;
     loop {
         drift_samples += 1;
-        let value = if rand::random::<f64>() < 0.80 { 1.0 } else { 0.0 };
+        let value = if rand::random::<f64>() < 0.80 {
+            1.0
+        } else {
+            0.0
+        };
         if cusum.observe(value) {
-            println!("  ✓ Drift detected after {} samples (S = {:.3})", drift_samples, cusum.statistic());
+            println!(
+                "  ✓ Drift detected after {} samples (S = {:.3})",
+                drift_samples,
+                cusum.statistic()
+            );
             break;
         }
         if drift_samples > 200 {
@@ -519,7 +613,10 @@ async fn proof_04_graduation_pipeline() {
         println!(
             "  {} accuracy {}: Wilson 99% CI [{:.3}, {:.3}] → lower {:.3} {} threshold {:.2} → {}",
             if passes { "✓" } else { "✗" },
-            label, lo, hi, lower,
+            label,
+            lo,
+            hi,
+            lower,
             if passes { ">=" } else { "<" },
             config.graduation_accuracy,
             if passes { "PASS" } else { "FAIL" }
@@ -535,8 +632,10 @@ async fn proof_05_status_report() {
     println!("PROOF OF PIPELINE: Status Report");
     println!("============================================================\n");
 
-    let mut config = EigenTuneConfig::default();
-    config.enabled = true; // Must enable for collector to save data
+    let config = EigenTuneConfig {
+        enabled: true, // Must enable for collector to save data
+        ..Default::default()
+    };
 
     let store = Arc::new(EigenTuneStore::new("sqlite::memory:").await.unwrap());
     let collector = EigenTuneCollector::new(store.clone(), true);
@@ -562,7 +661,9 @@ async fn proof_05_status_report() {
     }
 
     // Create engine with populated store for status
-    let engine = temm1e_distill::EigenTuneEngine::new(&config, "sqlite::memory:").await.unwrap();
+    let engine = temm1e_distill::EigenTuneEngine::new(&config, "sqlite::memory:")
+        .await
+        .unwrap();
     // Engine has its own store — use store directly for verification
     let total = store.total_pairs().await.unwrap();
 

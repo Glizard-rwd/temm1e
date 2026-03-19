@@ -295,7 +295,11 @@ impl EigenTuneEngine {
                     };
                     out.push_str(&format!("  {} MLX: {}\n", mlx_icon, mlx_hint));
                 } else {
-                    let us_icon = if prereqs.unsloth_installed { "✓" } else { "✗" };
+                    let us_icon = if prereqs.unsloth_installed {
+                        "✓"
+                    } else {
+                        "✗"
+                    };
                     let us_hint = if prereqs.unsloth_installed {
                         "installed".to_string()
                     } else {
@@ -381,7 +385,10 @@ impl EigenTuneEngine {
                         size_bytes: m.size.unwrap_or(0),
                         family: m.details.as_ref().and_then(|d| d.family.clone()),
                         param_size: m.details.as_ref().and_then(|d| d.parameter_size.clone()),
-                        quantization: m.details.as_ref().and_then(|d| d.quantization_level.clone()),
+                        quantization: m
+                            .details
+                            .as_ref()
+                            .and_then(|d| d.quantization_level.clone()),
                         source: "ollama".to_string(),
                     })
                     .collect();
@@ -430,7 +437,9 @@ impl EigenTuneEngine {
                 let marker = if i == 0 { "→" } else { " " };
                 out.push_str(&format!(
                     "  {} {} ({}, ~{} GB RAM)\n",
-                    marker, model.name, model.param_size.as_deref().unwrap_or("?"),
+                    marker,
+                    model.name,
+                    model.param_size.as_deref().unwrap_or("?"),
                     model.size_bytes / 1_000_000_000
                 ));
             }
@@ -452,10 +461,7 @@ impl EigenTuneEngine {
                     } else {
                         "? GB".to_string()
                     };
-                    out.push_str(&format!(
-                        "  {} ({})\n",
-                        m.name, size
-                    ));
+                    out.push_str(&format!("  {} ({})\n", m.name, size));
                 }
             }
         } else {
@@ -701,8 +707,10 @@ mod tests {
 
     #[test]
     fn test_set_model() {
-        let mut config = EigenTuneConfig::default();
-        config.base_model = "mlx-community/Llama-3.1-8B-Instruct-4bit".to_string();
+        let config = EigenTuneConfig {
+            base_model: "mlx-community/Llama-3.1-8B-Instruct-4bit".to_string(),
+            ..Default::default()
+        };
         assert!(config.base_model.contains("Llama"));
     }
 
@@ -718,17 +726,23 @@ mod tests {
         let models = recommend_models(16, "Apple M2");
         assert!(!models.is_empty());
         // Should recommend at least SmolLM2 and up to 8B
-        assert!(models.iter().any(|m| m.param_size.as_deref() == Some("135M")));
+        assert!(models
+            .iter()
+            .any(|m| m.param_size.as_deref() == Some("135M")));
         assert!(models.iter().any(|m| m.param_size.as_deref() == Some("8B")));
         // Should NOT recommend 24B+ for 16GB
-        assert!(!models.iter().any(|m| m.param_size.as_deref() == Some("24B")));
+        assert!(!models
+            .iter()
+            .any(|m| m.param_size.as_deref() == Some("24B")));
     }
 
     #[test]
     fn test_recommend_models_8gb() {
         let models = recommend_models(8, "Apple M1");
         // Should have SmolLM2 and small models, but NOT 7B/8B
-        assert!(models.iter().any(|m| m.param_size.as_deref() == Some("135M")));
+        assert!(models
+            .iter()
+            .any(|m| m.param_size.as_deref() == Some("135M")));
         assert!(!models.iter().any(|m| m.param_size.as_deref() == Some("8B")));
     }
 
@@ -738,15 +752,27 @@ mod tests {
         let nvidia_models = recommend_models(16, "NVIDIA RTX 4090");
 
         // Apple should use mlx-community prefix
-        let apple_7b = apple_models.iter().find(|m| m.param_size.as_deref() == Some("7B"));
+        let apple_7b = apple_models
+            .iter()
+            .find(|m| m.param_size.as_deref() == Some("7B"));
         if let Some(m) = apple_7b {
-            assert!(m.name.contains("mlx-community"), "Apple should use mlx-community: {}", m.name);
+            assert!(
+                m.name.contains("mlx-community"),
+                "Apple should use mlx-community: {}",
+                m.name
+            );
         }
 
         // NVIDIA should use unsloth prefix
-        let nvidia_7b = nvidia_models.iter().find(|m| m.param_size.as_deref() == Some("7B"));
+        let nvidia_7b = nvidia_models
+            .iter()
+            .find(|m| m.param_size.as_deref() == Some("7B"));
         if let Some(m) = nvidia_7b {
-            assert!(m.name.contains("unsloth"), "NVIDIA should use unsloth: {}", m.name);
+            assert!(
+                m.name.contains("unsloth"),
+                "NVIDIA should use unsloth: {}",
+                m.name
+            );
         }
     }
 
