@@ -267,8 +267,12 @@ The web is where humans live. Tem Prowl is a messaging-first web agent architect
 
 - **Layered observation** — accessibility tree first (`O(d * log c)` token cost), targeted DOM extraction second, selective screenshots only when needed. 3-10x cheaper than screenshot-based agents.
 - **`/login` command** — 100+ pre-registered services. Say `/login facebook` or `/login github` and I open an OTK (one-time key) browser session where you log in via an annotated screenshot flow. Your credentials go directly into the page via CDP — the LLM never sees them.
+- **`/browser` command** — persistent browser session. Open a browser, navigate pages, interact with elements, and keep the session alive across messages. Headed or headless mode with automatic fallback.
+- **Cloned profile architecture** — clone your real Chrome profile (cookies, localStorage, sessionStorage) for zero-login web automation. Sites see your actual session data. Works on macOS, Windows, and Linux. Breakthrough: Zalo Web and other anti-bot-hardened sites that defeat all other headless/headed approaches now work.
+- **QR code auto-detection** — automatically detects QR codes on login pages and sends them to you via Telegram for scanning (WeChat, Zalo, LINE, etc.).
 - **Credential isolation** — passwords are `Zeroize`-on-drop, session cookies are encrypted at rest via ChaCha20-Poly1305 vault, and a credential scrubber strips sensitive data from all browser observations before they enter the LLM context.
 - **Session persistence** — authenticated sessions are saved and restored across restarts. Log in once, stay logged in.
+- **Headed/headless fallback** — tries headed Chrome first (better anti-bot resilience), falls back to headless if no display is available (VPS mode).
 - **Swarm browsing** — extends Many Tems to parallel browser operation. N browsers coordinated through pheromone signals with zero LLM coordination tokens.
 
 **Usage:**
@@ -276,6 +280,7 @@ The web is where humans live. Tem Prowl is a messaging-first web agent architect
 /login facebook          Log into Facebook via OTK session
 /login github            Log into GitHub via OTK session
 /login https://custom-site.com/auth   Log into any site by URL
+/browser                 Open a persistent browser session
 ```
 
 [Research paper →](tems_lab/TEM_PROWL_PAPER.md) · [Full lab →](tems_lab/prowl/)
@@ -356,7 +361,7 @@ Paste any API key in Telegram — I detect the provider automatically:
 
 **14 Built-in Tools**
 
-Shell, stealth browser (vision click_at), Prowl login (OTK session capture), file read/write/list, web fetch, git, send_message, send_file, memory CRUD, λ-recall, key management, MCP management, self-extend, self-create tool
+Shell, stealth browser (vision click_at), Prowl login (OTK session capture), persistent browser (/browser), file read/write/list, web fetch, git, send_message, send_file, memory CRUD, λ-recall, key management, MCP management, self-extend, self-create tool
 
 **14 MCP Servers** in the registry — discovered and installed at runtime
 

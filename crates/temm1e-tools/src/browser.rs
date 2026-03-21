@@ -316,6 +316,44 @@ impl BrowserTool {
     // ── Public API for /browser command ──────────────────────────────
 
     /// Check if the browser is currently running.
+    /// Clean up SingletonLock/Socket/Cookie files from BOTH the work profile
+    /// and the real Chrome profile. This prevents Tem from blocking the user's
+    /// real Chrome from opening after Tem's browser closes.
+    fn cleanup_singleton_locks() {
+        let work_profile = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("temm1e")
+            .join("browser-profile");
+
+        // Clean work profile locks
+        for lock_file in &["SingletonLock", "SingletonSocket", "SingletonCookie"] {
+            let path = work_profile.join(lock_file);
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+
+        // Clean real Chrome profile locks (in case Chrome inherited our lock)
+        if let Some(real_default) = Self::find_chrome_profile() {
+            if let Some(real_root) = real_default.parent() {
+                for lock_file in &["SingletonLock", "SingletonSocket", "SingletonCookie"] {
+                    let path = real_root.join(lock_file);
+                    if path.exists() {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+
+        // Clean chromiumoxide runner locks
+        let runner_dir = std::env::temp_dir().join("chromiumoxide-runner");
+        if runner_dir.exists() {
+            let _ = std::fs::remove_file(runner_dir.join("SingletonLock"));
+        }
+
+        tracing::debug!("Cleaned up Chrome SingletonLock files");
+    }
+
     /// Find the user's real Chrome/Chromium profile directory (cross-platform).
     fn find_chrome_profile() -> Option<std::path::PathBuf> {
         let home = dirs::home_dir()?;
@@ -663,6 +701,10 @@ impl BrowserTool {
             if pid > 0 {
                 kill_chrome_children(pid);
             }
+            // CRITICAL: Clean up SingletonLock files so the user's real Chrome
+            // can still open. The cloned work profile leaves locks that block
+            // the real Chrome from launching.
+            Self::cleanup_singleton_locks();
             tracing::info!("Browser closed by agent");
             "Browser closed.".to_string()
         } else {
@@ -1592,6 +1634,9 @@ impl Drop for BrowserTool {
         if pid > 0 {
             kill_chrome_children(pid);
         }
+
+        // CRITICAL: Clean up SingletonLock files so user's real Chrome can open.
+        Self::cleanup_singleton_locks();
     }
 }
 

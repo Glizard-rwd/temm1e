@@ -1,9 +1,48 @@
 # Tem Prowl: Final Report
 
 > **Authors:** Quan Duong, Claude Opus 4.6 (TEMM1E Labs)
-> **Date:** 2026-03-20
+> **Date:** 2026-03-21 (V2 update)
 > **Branch:** `tem-browse`
-> **Status:** Live-validated. Facebook end-to-end test passed.
+> **Status:** Live-validated. Facebook end-to-end test passed. Zalo Web breakthrough via cloned profile.
+
+---
+
+## V2 Update (2026-03-21)
+
+Since the initial release (V1, 2026-03-20), Tem Prowl has been extended with four major capabilities:
+
+### Persistent Browser (`/browser` command)
+
+The `/browser` command opens a persistent browser session that survives across messages. Previously, each browse action launched and tore down a fresh Chrome instance. Now the browser stays alive for the duration of the chat session, enabling multi-step workflows ("navigate to X, now click Y, now extract Z") without re-launching Chrome each time. The browser supports both headed and headless modes with automatic fallback — headed mode is tried first for better anti-bot resilience, with headless as the fallback for VPS/server environments with no display.
+
+### QR Code Auto-Detection
+
+Login pages that present QR codes (WeChat, Zalo, LINE, WhatsApp Web) are now automatically detected. The agent captures the QR code and sends it to the user via Telegram for scanning on their phone. Once the user scans, the agent detects the post-scan page state change and captures the authenticated session. This extends the OTK login flow to scan-based authentication systems that have no username/password form.
+
+### Cloned Profile Architecture (Breakthrough)
+
+The most significant V2 discovery. The agent clones the user's real Chrome profile — including cookies, localStorage, sessionStorage, and IndexedDB — to a working directory and connects via CDP debug port. Websites see the user's actual session data, eliminating anti-bot detection for sites that are inaccessible to all other approaches.
+
+**Zalo Web case study:** Zalo Web (chat.zalo.me), Vietnam's dominant messaging platform, returned a completely blank page with:
+- Headless Chrome (default)
+- Headed Chrome with stealth flags (no webdriver, realistic UA)
+- Headed Chrome without stealth flags
+- OTK session capture + cookie restore
+
+Only the cloned profile approach succeeded. The root cause: Zalo requires localStorage and IndexedDB entries set during the initial interactive login flow, not just cookies. No amount of cookie injection or stealth configuration can replicate this state.
+
+**Cross-platform support:**
+- macOS: `~/Library/Application Support/Google/Chrome/Default`
+- Windows: `%LOCALAPPDATA%\Google\Chrome\User Data\Default`
+- Linux: `~/.config/google-chrome/Default`
+
+**VPS fallback:** When no local Chrome profile exists, the system falls back to fresh profile + headless + vault-based session restore via `/login` and `restore_web_session`.
+
+**Novelty:** To our knowledge, no other web agent framework clones the user's browser profile for session inheritance. This is the 5th novel contribution of Tem Prowl (alongside OTK session capture, stigmergic swarm browsing, credential isolation dataflow proof, and incremental observation hashing).
+
+### Headed/Headless Fallback
+
+Chrome launch now tries headed mode first (better anti-bot resilience, required for some sites) and automatically falls back to headless if no display is available. This makes Tem Prowl work seamlessly on both desktop machines (headed) and VPS deployments (headless) without configuration changes.
 
 ---
 
@@ -186,7 +225,7 @@ The definitive validation. A real user on Telegram performed the following:
 
 ## 3. Novelty Assessment
 
-Four contributions that are, to our knowledge, genuinely novel:
+Five contributions that are, to our knowledge, genuinely novel:
 
 ### 3.1 OTK Session Capture for Messaging Agents
 
@@ -226,6 +265,14 @@ While accessibility-tree-first observation is not novel (Agent-E pioneered it), 
 ...is a unique architecture. The incremental hashing in particular is not present in any other web agent framework we surveyed.
 
 **Validated:** 32% cheaper than screenshots on multi-step tasks. 97.5% savings on unchanged pages.
+
+### 3.5 Cloned Profile Architecture for Session Inheritance
+
+No existing web agent framework clones the user's browser profile for session inheritance. Standard approaches (cookie injection, browser extensions, user handoff, session replay) each fail on sites that require full browser state beyond cookies — localStorage, IndexedDB, and application-specific storage entries set during interactive login.
+
+The cloned profile approach copies the user's real Chrome profile to a working directory and connects via CDP, providing the full session fidelity of running inside the user's browser (like Google Mariner) while maintaining the server-side headless operation model of Tem Prowl. The user does not need to install an extension, keep their browser open, or interact with a visual interface.
+
+**Validated:** Zalo Web — completely blank with all other approaches — renders fully with the cloned profile. Cross-platform paths verified on macOS, Windows, and Linux.
 
 ---
 

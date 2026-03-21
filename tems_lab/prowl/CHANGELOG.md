@@ -4,7 +4,36 @@ All changes on the `tem-browse` branch for Tem Prowl — web-native browsing wit
 
 ---
 
-## 2026-03-20 — Initial Release
+## 2026-03-21 — V2: Persistent Browser, Cloned Profile, QR Detection
+
+### Persistent Browser Session
+
+- **`/browser` command** — opens a persistent browser session that stays alive across messages. Users can navigate, interact, and inspect pages without re-launching Chrome each time.
+- **Headed/headless fallback** — tries headed Chrome first for better anti-bot resilience. If no display is available (VPS, headless server), automatically falls back to headless mode.
+- **Browser lifecycle management** — persistent browser is tied to the chat session. Explicit `/browser close` or session timeout tears it down.
+
+### Cloned Profile Architecture
+
+- **Chrome profile cloning** — clones the user's real Chrome profile (cookies, localStorage, sessionStorage, IndexedDB) to a working directory, then connects via CDP debug port. Sites see genuine session data from the user's actual browsing history.
+- **Cross-platform support** — automatic profile detection on macOS (`~/Library/Application Support/Google/Chrome`), Windows (`%LOCALAPPDATA%/Google/Chrome/User Data`), and Linux (`~/.config/google-chrome`).
+- **Zalo Web breakthrough** — Zalo Web (chat.zalo.me) was completely blank with headless Chrome, headed Chrome with stealth flags, AND headed Chrome without stealth flags. Only the cloned profile approach succeeded. The root cause: Zalo requires localStorage/IndexedDB entries set during initial interactive login, not just cookies.
+- **VPS fallback** — when no local Chrome profile exists, falls back to fresh profile + headless + vault-based session restore via `/login` and `restore_web_session`.
+- **Configurable profile path** — `[tools.browser] chrome_profile_path` in TOML config for non-default profiles and Chromium-based browsers (Brave, Edge, Vivaldi).
+
+### QR Code Auto-Detection
+
+- **QR code detection** — automatically detects QR codes on login pages (WeChat, Zalo, LINE, WhatsApp Web, etc.) and sends them to the user via Telegram for scanning.
+- **Scan-based login flow** — user scans QR on their phone, agent detects the post-scan page state change, captures the authenticated session.
+
+### Research Paper Updates
+
+- Updated TEM_PROWL_PAPER.md to v0.4 with cloned profile architecture as the 6th novel contribution.
+- Added Section 11.10 covering the cloned profile discovery, Zalo case study, cross-platform paths, VPS fallback, and novelty assessment.
+- Updated abstract, contributions list, positioning table, and conclusion.
+
+---
+
+## 2026-03-20 — V1: Initial Release
 
 ### New Modules (temm1e-tools)
 
