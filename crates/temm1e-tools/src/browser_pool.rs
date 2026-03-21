@@ -69,8 +69,18 @@ impl BrowserPool {
         assert!(max_size > 0, "Pool size must be at least 1");
         assert!(max_size <= 64, "Pool size limited to 64 (bitset)");
 
-        let config = BrowserConfig::builder()
-            .arg("--headless=new")
+        let force_headless = std::env::var("TEMM1E_HEADLESS").unwrap_or_default() == "1";
+        let has_display = std::env::var("DISPLAY").is_ok()
+            || std::env::var("WAYLAND_DISPLAY").is_ok()
+            || cfg!(target_os = "macos")
+            || cfg!(target_os = "windows");
+        let use_headless = force_headless || !has_display;
+
+        let mut builder = BrowserConfig::builder();
+        if use_headless {
+            builder = builder.arg("--headless=new");
+        }
+        let config = builder
             .arg("--disable-gpu")
             .arg("--no-sandbox")
             .arg("--disable-dev-shm-usage")

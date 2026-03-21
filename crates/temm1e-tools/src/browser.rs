@@ -669,9 +669,32 @@ impl BrowserTool {
             }
         }
 
-        // ── Stealth launch flags ─────────────────────────────────────
-        let mut builder = BrowserConfig::builder()
-            .arg("--headless=new")
+        // ── Browser mode: headed (full window) with headless fallback ──
+        // Headed mode avoids anti-bot detection on sites like Zalo, WhatsApp.
+        // Falls back to headless on VPS/Docker where no display is available.
+        // Override with TEMM1E_HEADLESS=1 to force headless.
+        let force_headless = std::env::var("TEMM1E_HEADLESS").unwrap_or_default() == "1";
+        let has_display = std::env::var("DISPLAY").is_ok()
+            || std::env::var("WAYLAND_DISPLAY").is_ok()
+            || cfg!(target_os = "macos")
+            || cfg!(target_os = "windows");
+        let use_headless = force_headless || !has_display;
+
+        let mut builder = BrowserConfig::builder();
+
+        if use_headless {
+            builder = builder.arg("--headless=new");
+            tracing::info!("Browser launching in headless mode");
+        } else {
+            // Headed mode — real Chrome window, avoids anti-bot detection
+            // Window starts minimized to avoid disrupting the user
+            builder = builder
+                .arg("--window-position=0,0")
+                .arg("--window-size=1280,900");
+            tracing::info!("Browser launching in headed mode (better site compatibility)");
+        }
+
+        builder = builder
             .arg("--disable-gpu")
             .arg("--no-sandbox")
             .arg("--disable-dev-shm-usage");
@@ -690,17 +713,25 @@ impl BrowserTool {
             );
         }
 
+        // TEMM1E_NO_STEALTH=1 disables all anti-detection flags (for sites
+        // like Zalo that detect stealth flags themselves and show blank pages)
+        let no_stealth = std::env::var("TEMM1E_NO_STEALTH").unwrap_or_default() == "1";
+
+        if !no_stealth {
+            builder = builder
+                .arg("--disable-blink-features=AutomationControlled")
+                .arg("--disable-infobars")
+                .arg("--disable-background-timer-throttling")
+                .arg("--disable-backgrounding-occluded-windows")
+                .arg("--disable-renderer-backgrounding")
+                .arg("--disable-ipc-flooding-protection")
+                .arg(format!("--user-agent={}", STEALTH_USER_AGENT))
+                .arg("--lang=en-US,en");
+        } else {
+            tracing::info!("Stealth flags DISABLED (TEMM1E_NO_STEALTH=1)");
+        }
+
         let config = builder
-            // Anti-detection flags
-            .arg("--disable-blink-features=AutomationControlled")
-            .arg("--disable-infobars")
-            .arg("--disable-background-timer-throttling")
-            .arg("--disable-backgrounding-occluded-windows")
-            .arg("--disable-renderer-backgrounding")
-            .arg("--disable-ipc-flooding-protection")
-            .arg(format!("--user-agent={}", STEALTH_USER_AGENT))
-            .arg("--lang=en-US,en")
-            // Realistic window size (1920x1080 is common)
             .window_size(1920, 1080)
             .build()
             .map_err(|e| Temm1eError::Tool(format!("Failed to build browser config: {}", e)))?;

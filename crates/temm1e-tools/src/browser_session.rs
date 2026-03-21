@@ -176,8 +176,19 @@ impl InteractiveBrowseSession {
         use chromiumoxide::browser::{Browser, BrowserConfig};
         use futures::StreamExt;
 
-        let mut builder = BrowserConfig::builder()
-            .arg("--headless=new")
+        // Headed with headless fallback (same logic as BrowserTool)
+        let force_headless = std::env::var("TEMM1E_HEADLESS").unwrap_or_default() == "1";
+        let has_display = std::env::var("DISPLAY").is_ok()
+            || std::env::var("WAYLAND_DISPLAY").is_ok()
+            || cfg!(target_os = "macos")
+            || cfg!(target_os = "windows");
+        let use_headless = force_headless || !has_display;
+
+        let mut builder = BrowserConfig::builder();
+        if use_headless {
+            builder = builder.arg("--headless=new");
+        }
+        builder = builder
             .arg("--disable-gpu")
             .arg("--no-sandbox")
             .arg("--disable-dev-shm-usage")
