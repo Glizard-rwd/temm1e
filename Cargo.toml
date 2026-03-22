@@ -54,6 +54,13 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres"] }
 teloxide = { version = "0.17", features = ["macros"] }
 serenity = { version = "0.12", features = ["gateway", "model"] }
 poise = "0.6"
+wa-rs = { version = "0.2", default-features = false, features = ["sqlite-storage", "tokio-transport", "ureq-client", "tokio-native"] }
+wa-rs-core = { version = "0.2", default-features = false }
+wa-rs-binary = { version = "0.2", default-features = false }
+wa-rs-sqlite-storage = "0.2"
+wa-rs-tokio-transport = "0.2"
+wa-rs-ureq-http = "0.2"
+qrcode = "0.14"
 
 # Crypto
 chacha20poly1305 = "0.10"
@@ -182,6 +189,8 @@ postgres = ["temm1e-memory/postgres"]
 mcp = ["dep:temm1e-mcp"]
 codex-oauth = ["dep:temm1e-codex-oauth"]
 tui = ["dep:temm1e-tui"]
+whatsapp = ["temm1e-channels/whatsapp"]
+whatsapp-web = ["temm1e-channels/whatsapp-web"]
 
 [profile.release]
 opt-level = "z"

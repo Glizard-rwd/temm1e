@@ -125,6 +125,8 @@ enum Commands {
     /// Interactive TUI with rich rendering, observability, and slash commands
     #[cfg(feature = "tui")]
     Tui,
+    /// Interactive setup wizard — guides you through first-time configuration
+    Setup,
 }
 
 #[cfg(feature = "codex-oauth")]
@@ -953,6 +955,193 @@ async fn send_with_retry(
     }
 }
 
+/// Interactive setup wizard — guides first-time users through configuration.
+///
+/// Steps:
+/// 1. Channel selection (Telegram, Discord, or skip)
+/// 2. AI provider authentication
+/// 3. Writes a minimal config and prints next steps
+async fn run_setup_wizard() -> Result<()> {
+    use std::io::{self, BufRead, Write};
+
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot find home directory"))?;
+    let temm1e_dir = home.join(".temm1e");
+    std::fs::create_dir_all(&temm1e_dir)?;
+
+    println!();
+    println!("  ╭──────────────────────────────────────╮");
+    println!("  │       TEMM1E — Setup Wizard          │");
+    println!("  ╰──────────────────────────────────────╯");
+    println!();
+
+    let stdin = io::stdin();
+    let mut input = String::new();
+
+    // ── Step 1: Channel ─────────────────────────────────────────────
+    println!("  How do you want to talk to me?");
+    println!();
+    println!("    1) Telegram bot  (most popular)");
+    println!("    2) Discord bot");
+    println!("    3) CLI only      (no messaging app needed)");
+    println!();
+    print!("  Choose [1/2/3]: ");
+    io::stdout().flush()?;
+    input.clear();
+    stdin.lock().read_line(&mut input)?;
+    let channel_choice = input.trim();
+
+    let mut config_lines: Vec<String> = Vec::new();
+    let mut env_hint = String::new();
+
+    match channel_choice {
+        "1" | "telegram" | "" => {
+            println!();
+            println!("  Telegram! Great choice.");
+            println!();
+            println!("  If you don't have a bot yet:");
+            println!("    1. Open Telegram, search @BotFather");
+            println!("    2. Send /newbot, follow the prompts");
+            println!("    3. Copy the bot token");
+            println!();
+            print!("  Paste your Telegram bot token (or press Enter to skip): ");
+            io::stdout().flush()?;
+            input.clear();
+            stdin.lock().read_line(&mut input)?;
+            let token = input.trim();
+            if token.is_empty() {
+                println!(
+                    "  Skipped — set TELEGRAM_BOT_TOKEN env var before running `temm1e start`."
+                );
+                env_hint = "export TELEGRAM_BOT_TOKEN=\"your-token-here\"".to_string();
+            } else {
+                config_lines.push("[channel.telegram]".to_string());
+                config_lines.push("enabled = true".to_string());
+                config_lines.push(format!("token = \"{}\"", token));
+                config_lines.push("allowlist = []".to_string());
+                config_lines.push("file_transfer = true".to_string());
+            }
+        }
+        "2" | "discord" => {
+            println!();
+            println!("  Discord! Nice.");
+            println!();
+            print!("  Paste your Discord bot token (or press Enter to skip): ");
+            io::stdout().flush()?;
+            input.clear();
+            stdin.lock().read_line(&mut input)?;
+            let token = input.trim();
+            if token.is_empty() {
+                println!(
+                    "  Skipped — set DISCORD_BOT_TOKEN env var before running `temm1e start`."
+                );
+                env_hint = "export DISCORD_BOT_TOKEN=\"your-token-here\"".to_string();
+            } else {
+                config_lines.push("[channel.discord]".to_string());
+                config_lines.push("enabled = true".to_string());
+                config_lines.push(format!("token = \"{}\"", token));
+                config_lines.push("allowlist = []".to_string());
+            }
+        }
+        "3" | "cli" => {
+            println!();
+            println!("  CLI mode — run `temm1e chat` to talk to me directly.");
+        }
+        _ => {
+            println!("  Defaulting to CLI mode.");
+        }
+    }
+
+    // ── Step 2: AI Provider ─────────────────────────────────────────
+    println!();
+    println!("  How do you want to power my brain?");
+    println!();
+    println!("    1) Paste an API key (Anthropic, OpenAI, Gemini, Grok, etc.)");
+    println!("    2) Use ChatGPT Plus/Pro (OAuth login)");
+    println!("    3) Skip for now (set up in chat later)");
+    println!();
+    print!("  Choose [1/2/3]: ");
+    io::stdout().flush()?;
+    input.clear();
+    stdin.lock().read_line(&mut input)?;
+    let provider_choice = input.trim();
+
+    match provider_choice {
+        "1" | "api" | "" => {
+            println!();
+            print!("  Paste your API key: ");
+            io::stdout().flush()?;
+            input.clear();
+            stdin.lock().read_line(&mut input)?;
+            let key = input.trim().to_string();
+            if !key.is_empty() {
+                // Auto-detect provider
+                let provider = if key.starts_with("sk-ant-") {
+                    "anthropic"
+                } else if key.starts_with("AIzaSy") {
+                    "gemini"
+                } else if key.starts_with("xai-") {
+                    "grok"
+                } else if key.starts_with("sk-or-") {
+                    "openrouter"
+                } else {
+                    // Default: OpenAI-compatible (sk- prefix or unknown)
+                    "openai"
+                };
+                println!("  Detected provider: {provider}");
+
+                // Save to credentials file (encrypted later by the agent)
+                let creds_path = temm1e_dir.join("credentials.toml");
+                let creds_content = format!("[providers.{}]\napi_key = \"{}\"\n", provider, key);
+                std::fs::write(&creds_path, creds_content)?;
+                println!("  Saved to ~/.temm1e/credentials.toml");
+            } else {
+                println!("  Skipped — you can paste your API key in chat later.");
+            }
+        }
+        "2" | "oauth" | "chatgpt" => {
+            println!();
+            println!("  Run `temm1e auth login` to authenticate with ChatGPT.");
+        }
+        _ => {
+            println!("  Skipped — you can set up a provider in chat later.");
+        }
+    }
+
+    // ── Step 3: Write config ────────────────────────────────────────
+    let config_path = temm1e_dir.join("temm1e.toml");
+    if !config_lines.is_empty() {
+        // Build minimal config
+        let mut full_config = String::new();
+        full_config.push_str("# TEMM1E configuration — generated by `temm1e setup`\n\n");
+        full_config.push_str("[memory]\nbackend = \"sqlite\"\n\n");
+        full_config.push_str(&config_lines.join("\n"));
+        full_config.push('\n');
+
+        std::fs::write(&config_path, &full_config)?;
+        println!();
+        println!("  Config written to ~/.temm1e/temm1e.toml");
+    }
+
+    // ── Done ────────────────────────────────────────────────────────
+    println!();
+    println!("  ╭──────────────────────────────────────╮");
+    println!("  │         Setup complete!               │");
+    println!("  ╰──────────────────────────────────────╯");
+    println!();
+    if !env_hint.is_empty() {
+        println!("  Before starting, set your token:");
+        println!("    {}", env_hint);
+        println!();
+    }
+    println!("  Next steps:");
+    println!("    temm1e start       Start the bot");
+    println!("    temm1e chat        Chat in CLI mode");
+    println!("    temm1e status      Check health");
+    println!();
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -1434,6 +1623,34 @@ async fn main() -> Result<()> {
                 }
             }
 
+            // ── WhatsApp Web channel ─────────────────────────
+            #[cfg(feature = "whatsapp-web")]
+            let mut whatsapp_web_rx: Option<
+                tokio::sync::mpsc::Receiver<temm1e_core::types::message::InboundMessage>,
+            > = None;
+
+            #[cfg(feature = "whatsapp-web")]
+            {
+                if let Some(wa_config) = config
+                    .channel
+                    .get("whatsapp_web")
+                    .or_else(|| config.channel.get("whatsapp-web"))
+                {
+                    if wa_config.enabled {
+                        let mut wa = temm1e_channels::WhatsAppWebChannel::new(wa_config)?;
+                        wa.start().await?;
+                        whatsapp_web_rx = wa.take_receiver();
+                        let wa_arc: Arc<dyn temm1e_core::Channel> = Arc::new(wa);
+                        channels.push(wa_arc.clone());
+                        channel_map.insert("whatsapp-web".to_string(), wa_arc.clone());
+                        if primary_channel.is_none() {
+                            primary_channel = Some(wa_arc.clone());
+                        }
+                        tracing::info!("WhatsApp Web channel started");
+                    }
+                }
+            }
+
             // ── Channel map zero-channels guard ──────────────────
             if channel_map.is_empty() {
                 tracing::warn!(
@@ -1735,6 +1952,19 @@ async fn main() -> Result<()> {
                 let tx = msg_tx.clone();
                 task_handles.push(tokio::spawn(async move {
                     while let Some(msg) = discord_rx.recv().await {
+                        if tx.send(msg).await.is_err() {
+                            break;
+                        }
+                    }
+                }));
+            }
+
+            // Wire WhatsApp Web messages into the unified channel
+            #[cfg(feature = "whatsapp-web")]
+            if let Some(mut wa_rx) = whatsapp_web_rx {
+                let tx = msg_tx.clone();
+                task_handles.push(tokio::spawn(async move {
+                    while let Some(msg) = wa_rx.recv().await {
                         if tx.send(msg).await.is_err() {
                             break;
                         }
@@ -5615,6 +5845,9 @@ Just type a message to chat with the AI agent.",
         #[cfg(feature = "tui")]
         Commands::Tui => {
             temm1e_tui::launch_tui(config).await?;
+        }
+        Commands::Setup => {
+            run_setup_wizard().await?;
         }
     }
 
