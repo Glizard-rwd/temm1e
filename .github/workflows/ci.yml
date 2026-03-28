@@ -22,7 +22,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.83"
+          toolchain: "1.85"
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -50,7 +50,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.83"
+          toolchain: "1.85"
 
       - uses: Swatinem/rust-cache@v2
 
@@ -74,7 +74,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.83"
+          toolchain: "1.85"
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
@@ -155,7 +155,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.83"
+          toolchain: "1.85"
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked

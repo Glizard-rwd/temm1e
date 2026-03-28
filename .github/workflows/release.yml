@@ -15,7 +15,13 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.85"
           components: clippy, rustfmt
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxcb1-dev libxcb-randr0-dev libxcb-shm0-dev libxkbcommon-dev
 
       - name: Cargo check
         run: cargo check
@@ -60,6 +66,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.85"
           targets: ${{ matrix.target }}
 
       - name: Install musl-tools (Linux x86_64)
