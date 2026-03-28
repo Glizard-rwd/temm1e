@@ -145,8 +145,24 @@ grep -n "tests" SETUP_FOR_PROS.md
 ### Phase 7: CI Verification
 
 **.github/workflows/ci.yml:**
-- If a new feature flag was added, verify it's included in the clippy/test matrix
-- If new crate dependencies require system libraries, add `apt-get install` steps
+- CI runs `cargo clippy --workspace --all-targets --all-features` — this includes ALL feature-gated crates
+- If a new feature flag was added, it is automatically covered by `--all-features`
+- **If new crate dependencies require system libraries (C libs, pkg-config):** add `apt-get install` to the `Install system dependencies` step in the `check` job
+- Current system deps installed in CI: `libwayland-dev libxcb1-dev libxcb-randr0-dev libxcb-shm0-dev libxkbcommon-dev` (for xcap/desktop-control)
+- **Test this locally first:** `cargo clippy --workspace --all-targets --all-features` must pass on your machine before pushing. If it passes locally but fails in CI, the difference is missing system libraries on the Ubuntu runner.
+
+**Common CI failures from new features:**
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `pkg-config ... was not found` | New crate needs a C library | Add `apt-get install libXXX-dev` to CI |
+| `wayland-sys build failed` | xcap needs Wayland libs on Linux | Already fixed: `libwayland-dev` installed |
+| `failed to link` on musl target | C library not available for musl | Either vendor the lib or exclude the feature from musl builds |
+| Clippy passes locally (macOS) but fails in CI (Linux) | Platform-specific deps | Add Linux-specific `apt-get install` |
+
+**.github/workflows/release.yml:**
+- The release build does NOT use `--all-features` — it builds the default feature set
+- `desktop-control` is opt-in and NOT built in release CI (correct — users enable it themselves)
+- If a new **default** feature requires system libs, add them to the release workflow too
 
 ---
 
@@ -221,7 +237,8 @@ git push origin main
 [ ] SETUP_FOR_PROS.md optional features updated
 [ ] docs/dev/getting-started.md feature table updated
 [ ] Dockerfile verified (default features)
-[ ] CI workflows verified (new features)
+[ ] CI workflows verified (new features + system deps)
+[ ] CI system deps updated if new C libraries needed
 [ ] Final compilation gates re-passed
 [ ] Test count matches README
 [ ] Committed and pushed
@@ -243,9 +260,13 @@ git push origin main
 | Feature flag chain incomplete | `--features X` doesn't enable dependency | Root feature must enable child crate feature |
 | MCP Playwright left in config | 5.7x cost multiplier, tool confusion | Removed in v3.4.0, don't re-add |
 | Stale test count from earlier version | Users see wrong number, lose trust | Always re-count with `cargo test --all-features` |
+| New crate needs C library, CI not updated | CI fails with `pkg-config ... not found` | Add `apt-get install` to CI check job |
+| Clippy passes on macOS, fails on Linux CI | Platform-specific system deps missing | Test `--all-features` locally AND check CI deps |
+| Feature-gated crate pulls in system lib | `--all-features` in CI triggers build of all crates | Add system dep to CI, or exclude feature from CI |
 
 ---
 
 ## Version History of This Protocol
 
+- **v2 (v3.4.0 hotfix, 2026-03-28):** Added CI/CD section with system dependency management, common CI failure table, release.yml vs ci.yml feature scope distinction. Triggered by `wayland-sys` build failure in CI after desktop-control feature was added.
 - **v1 (v3.4.0, 2026-03-28):** Created from Tem Gaze release. Covers: compilation gates, version bump, README (badges, test counts, architecture tree, release timeline, feature instructions), CLAUDE.md, SETUP_FOR_PROS.md, getting-started.md, Dockerfile, CI, merge workflow. Derived from actual mistakes made during the release process.
