@@ -1665,10 +1665,13 @@ impl Tool for BrowserTool {
          - close: Close the browser when done (auto-closes after idle timeout)\n\n\
          Vision workflow: screenshot → analyze image → click_at coordinates → repeat.\n\
          This bypasses Shadow DOM, anti-bot CSS tricks, and hidden elements.\n\n\
+         Zoom-refine workflow: screenshot → identify target region → zoom_region x1,y1,x2,y2 → \
+         analyze zoomed view → click_at precise coordinates. Much more accurate for small elements.\n\n\
          Structured observation: accessibility_tree → read numbered elements → \
          interact by selector or click_at. Lighter than screenshots for form-heavy pages.\n\n\
          Layered observation: observe → auto-selects optimal data level → \
-         avoids wasting tokens on screenshots when tree is sufficient.\n\n\
+         avoids wasting tokens on screenshots when tree is sufficient. \
+         Tier 3 includes numbered SoM labels on interactive elements for precise targeting.\n\n\
          The browser runs in stealth mode with anti-detection patches applied."
     }
 
@@ -1678,7 +1681,7 @@ impl Tool for BrowserTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["navigate", "click", "click_at", "type", "screenshot", "get_text", "evaluate", "get_html", "save_session", "restore_session", "accessibility_tree", "observe_tree", "observe", "authenticate", "restore_web_session", "close"],
+                    "enum": ["navigate", "click", "click_at", "type", "screenshot", "get_text", "evaluate", "get_html", "save_session", "restore_session", "accessibility_tree", "observe_tree", "observe", "zoom_region", "authenticate", "restore_web_session", "close"],
                     "description": "The browser action to perform"
                 },
                 "url": {
@@ -1724,6 +1727,22 @@ impl Tool for BrowserTool {
                 "retry": {
                     "type": "boolean",
                     "description": "Set true if previous action failed — triggers visual verification via screenshot (for 'observe' action)"
+                },
+                "x1": {
+                    "type": "number",
+                    "description": "Left X coordinate of region (for 'zoom_region' action)"
+                },
+                "y1": {
+                    "type": "number",
+                    "description": "Top Y coordinate of region (for 'zoom_region' action)"
+                },
+                "x2": {
+                    "type": "number",
+                    "description": "Right X coordinate of region (for 'zoom_region' action)"
+                },
+                "y2": {
+                    "type": "number",
+                    "description": "Bottom Y coordinate of region (for 'zoom_region' action)"
                 }
             },
             "required": ["action"]
@@ -2447,6 +2466,78 @@ impl Tool for BrowserTool {
                     ObservationTier::TreeWithScreenshot { selector: sel } => {
                         use chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat;
 
+                        // --- Prowl V2: SoM overlay injection ---
+                        // Before capturing the screenshot, overlay numbered labels on
+                        // interactive elements so the VLM can reference them by [N]
+                        // matching the accessibility tree output.
+                        let som_injected = {
+                            let som_js = r#"(() => {
+                                const labels = [];
+                                let idx = 1;
+                                const walk = (el, depth) => {
+                                    if (!el || el.nodeType !== 1) return;
+                                    const tag = el.tagName.toLowerCase();
+                                    const role = el.getAttribute('role') || '';
+                                    const isInteractive = ['a','button','input','select','textarea'].includes(tag)
+                                        || ['button','link','textbox','combobox','checkbox','radio','tab','menuitem','searchbox','slider','switch'].includes(role);
+                                    const isSemantic = ['h1','h2','h3','h4','h5','h6','nav','main','form','table','img','ul','ol'].includes(tag)
+                                        || ['heading','navigation','main','form','table','list','listitem','img','alert','dialog'].includes(role);
+                                    if (isInteractive || isSemantic) {
+                                        const rect = el.getBoundingClientRect();
+                                        if (rect.width > 0 && rect.height > 0 &&
+                                            rect.top >= 0 && rect.left >= 0 &&
+                                            rect.top < window.innerHeight && rect.left < window.innerWidth) {
+                                            const label = document.createElement('div');
+                                            label.className = 'gaze-som-overlay';
+                                            label.textContent = idx;
+                                            label.style.cssText = `
+                                                position: fixed;
+                                                left: ${Math.max(0, rect.left - 11)}px;
+                                                top: ${Math.max(0, rect.top - 11)}px;
+                                                width: 22px;
+                                                height: 22px;
+                                                background: #e53e3e;
+                                                color: white;
+                                                font-size: 11px;
+                                                font-weight: bold;
+                                                line-height: 22px;
+                                                text-align: center;
+                                                border-radius: 50%;
+                                                z-index: 2147483647;
+                                                pointer-events: none;
+                                                box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+                                                font-family: Arial, sans-serif;
+                                            `;
+                                            document.body.appendChild(label);
+                                            labels.push(idx);
+                                        }
+                                        idx++;
+                                    }
+                                    for (const child of el.children) walk(child, isInteractive || isSemantic ? depth+1 : depth);
+                                };
+                                const root = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+                                walk(root, 0);
+                                return labels.length;
+                            })()"#;
+
+                            match page.evaluate(som_js).await {
+                                Ok(result) => {
+                                    let count = result.into_value::<i64>().unwrap_or(0);
+                                    tracing::debug!(som_labels = count, "SoM overlays injected for Tier 3");
+                                    count > 0
+                                }
+                                Err(e) => {
+                                    tracing::warn!("SoM overlay injection failed (non-fatal): {}", e);
+                                    false
+                                }
+                            }
+                        };
+
+                        // Small delay for overlays to render
+                        if som_injected {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+
                         let png_data = if let Some(ref css_sel) = sel {
                             let el = page.find_element(css_sel).await.map_err(|e| {
                                 Temm1eError::Tool(format!(
@@ -2477,6 +2568,14 @@ impl Tool for BrowserTool {
                             })?
                         };
 
+                        // --- Clean up SoM overlays ---
+                        if som_injected {
+                            let cleanup_js = "document.querySelectorAll('.gaze-som-overlay').forEach(e => e.remove())";
+                            if let Err(e) = page.evaluate(cleanup_js).await {
+                                tracing::warn!("SoM overlay cleanup failed (non-fatal): {}", e);
+                            }
+                        }
+
                         // Store base64 image for vision injection by the runtime.
                         {
                             use base64::Engine;
@@ -2497,16 +2596,134 @@ impl Tool for BrowserTool {
                             ""
                         };
 
+                        let som_note = if som_injected {
+                            "\nScreenshot includes numbered [N] labels on interactive elements — \
+                             these match the [N] indices in the tree above. Reference by number \
+                             for precise targeting."
+                        } else {
+                            ""
+                        };
+
                         Ok(ToolOutput {
                             content: format!(
                                 "{}\n\n[Screenshot captured for visual analysis — \
-                                 Tier 3 observation]{}",
-                                tree_text, qr_note
+                                 Tier 3 observation with SoM labels]{}{}",
+                                tree_text, som_note, qr_note
                             ),
                             is_error: false,
                         })
                     }
                 }
+            }
+
+            "zoom_region" => {
+                use chromiumoxide::cdp::browser_protocol::page::{
+                    CaptureScreenshotFormat, CaptureScreenshotParams, Viewport,
+                };
+
+                let x1 = input
+                    .arguments
+                    .get("x1")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| {
+                        Temm1eError::Tool("'zoom_region' requires 'x1' parameter".into())
+                    })? as u32;
+                let y1 = input
+                    .arguments
+                    .get("y1")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| {
+                        Temm1eError::Tool("'zoom_region' requires 'y1' parameter".into())
+                    })? as u32;
+                let x2 = input
+                    .arguments
+                    .get("x2")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| {
+                        Temm1eError::Tool("'zoom_region' requires 'x2' parameter".into())
+                    })? as u32;
+                let y2 = input
+                    .arguments
+                    .get("y2")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| {
+                        Temm1eError::Tool("'zoom_region' requires 'y2' parameter".into())
+                    })? as u32;
+
+                tracing::info!(x1, y1, x2, y2, "Browser zoom_region — capturing region at full resolution");
+
+                // Validate the region
+                let region = crate::grounding::validate_zoom_region(x1, y1, x2, y2, 1920, 1080)
+                    .map_err(Temm1eError::Tool)?;
+
+                let [rx1, ry1, rx2, ry2] = region;
+                let region_w = (rx2 - rx1) as f64;
+                let region_h = (ry2 - ry1) as f64;
+
+                // Use CDP captureScreenshot with clip to capture just the region.
+                // The clip viewport captures at the specified coordinates and scale=1
+                // gives us the region at full resolution.
+                let clip = Viewport {
+                    x: rx1 as f64,
+                    y: ry1 as f64,
+                    width: region_w,
+                    height: region_h,
+                    scale: 2.0, // 2x for sharper detail in the zoomed view
+                };
+
+                let params = CaptureScreenshotParams::builder()
+                    .format(CaptureScreenshotFormat::Png)
+                    .clip(clip)
+                    .build();
+
+                let png_data = page.execute(
+                    chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotParams {
+                        format: Some(CaptureScreenshotFormat::Png),
+                        clip: Some(chromiumoxide::cdp::browser_protocol::page::Viewport {
+                            x: rx1 as f64,
+                            y: ry1 as f64,
+                            width: region_w,
+                            height: region_h,
+                            scale: 2.0,
+                        }),
+                        quality: None,
+                        from_surface: None,
+                        capture_beyond_viewport: None,
+                        optimize_for_speed: None,
+                    },
+                )
+                .await
+                .map_err(|e| Temm1eError::Tool(format!("zoom_region screenshot failed: {}", e)))?;
+
+                // CDP returns Binary (base64-encoded data) in the response.
+                use base64::Engine;
+                let b64_string: String = png_data.data.clone().into();
+                // Decode to get raw byte count for the status message
+                let raw_len = base64::engine::general_purpose::STANDARD
+                    .decode(&b64_string)
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+
+                // Store as last_image for vision pipeline injection by the runtime
+                if let Ok(mut img) = self.last_image.lock() {
+                    *img = Some(ToolOutputImage {
+                        media_type: "image/png".to_string(),
+                        data: b64_string,
+                    });
+                }
+
+                let _ = params; // suppress unused warning from builder pattern
+
+                Ok(ToolOutput {
+                    content: format!(
+                        "Zoomed into region ({},{})→({},{}) at 2x resolution ({} bytes). \
+                         The zoomed image is now visible for detailed analysis. \
+                         Use click_at with coordinates from the ORIGINAL page (not this zoomed view) \
+                         to interact with elements.",
+                        rx1, ry1, rx2, ry2, raw_len
+                    ),
+                    is_error: false,
+                })
             }
 
             "authenticate" => {

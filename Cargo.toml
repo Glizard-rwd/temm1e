@@ -20,10 +20,11 @@ members = [
     "crates/temm1e-tui",
     "crates/temm1e-hive",
     "crates/temm1e-distill",
+    "crates/temm1e-gaze",
 ]
 
 [workspace.package]
-version = "3.3.0"
+version = "3.4.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/nagisanzenin/temm1e"
@@ -130,6 +131,7 @@ temm1e-codex-oauth = { path = "crates/temm1e-codex-oauth" }
 temm1e-tui = { path = "crates/temm1e-tui" }
 temm1e-hive = { path = "crates/temm1e-hive" }
 temm1e-distill = { path = "crates/temm1e-distill" }
+temm1e-gaze = { path = "crates/temm1e-gaze" }
 
 [package]
 name = "temm1e"
@@ -159,6 +161,7 @@ temm1e-filestore.workspace = true
 temm1e-mcp = { workspace = true, optional = true }
 temm1e-codex-oauth = { workspace = true, optional = true }
 temm1e-tui = { workspace = true, optional = true }
+temm1e-gaze = { workspace = true, optional = true }
 temm1e-hive.workspace = true
 tokio.workspace = true
 clap.workspace = true
@@ -190,6 +193,7 @@ postgres = ["temm1e-memory/postgres"]
 mcp = ["dep:temm1e-mcp"]
 codex-oauth = ["dep:temm1e-codex-oauth"]
 tui = ["dep:temm1e-tui"]
+desktop-control = ["dep:temm1e-gaze", "temm1e-tools/desktop-control"]
 whatsapp = ["temm1e-channels/whatsapp"]
 whatsapp-web = ["temm1e-channels/whatsapp-web"]
 openssl-vendored = ["dep:openssl"]

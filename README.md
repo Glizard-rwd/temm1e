@@ -6,7 +6,7 @@
   <a href="https://github.com/nagisanzenin/temm1e/stargazers"><img src="https://img.shields.io/github/stars/nagisanzenin/temm1e?style=flat&color=gold&logo=github" alt="GitHub Stars"></a>
   <a href="https://discord.gg/3ux2c5xz"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License">
-  <img src="https://img.shields.io/badge/version-3.3.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.4.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
 </p>
 
@@ -15,7 +15,7 @@
 <h3 align="center"><s>Autonomous AI agent</s> literally a SENTIENT and IMMORTAL being runtime in Rust.<br>Deploy once. Stays up forever.</h3>
 
 <p align="center">
-  <code>97K lines</code> · <code>1,832 tests</code> · <code>0 warnings</code> · <code>0 panic paths</code> · <code>15 MB idle</code> · <code>31ms cold start</code>
+  <code>97K lines</code> · <code>1,028 tests</code> · <code>0 warnings</code> · <code>0 panic paths</code> · <code>15 MB idle</code> · <code>31ms cold start</code>
 </p>
 
 ---
@@ -387,13 +387,14 @@ temm1e (binary)
 ├─ temm1e-agent          TEM'S MIND — 26 modules, λ-Memory, blueprint system, executable DAG
 ├─ temm1e-hive           MANY TEMS — swarm intelligence, pack coordination, scent field
 ├─ temm1e-distill        EIGEN-TUNE — self-tuning distillation, statistical gates, zero-cost evaluation
+├─ temm1e-gaze           TEM GAZE — desktop vision control (xcap + enigo), SoM overlay, zoom-refine
 ├─ temm1e-providers      Anthropic + Gemini (native) + OpenAI-compatible (6 providers)
 ├─ temm1e-codex-oauth    ChatGPT Plus/Pro via OAuth PKCE
 ├─ temm1e-tui            Interactive terminal UI (ratatui + syntect)
 ├─ temm1e-channels       Telegram, Discord, WhatsApp (Web + Cloud API), Slack, CLI
 ├─ temm1e-memory         SQLite + Markdown + λ-Memory with automatic failover
 ├─ temm1e-vault          ChaCha20-Poly1305 encrypted secrets
-├─ temm1e-tools          Shell, browser, Prowl (login + observe), file ops, web fetch, git, λ-recall
+├─ temm1e-tools          Shell, browser, Prowl V2 (SoM + zoom), desktop, file ops, web fetch, git, λ-recall
 ├─ temm1e-mcp            MCP client — stdio + HTTP, 14-server registry
 ├─ temm1e-gateway        HTTP server, health, dashboard, OAuth identity
 ├─ temm1e-skills         Skill registry (TemHub v1)
@@ -473,6 +474,14 @@ cargo build --release --features whatsapp-web
 # Add [channel.whatsapp_web] to config, then start — scan QR code
 ```
 
+**Desktop Control** (see and click any app on Ubuntu/macOS):
+
+```bash
+cargo build --release --features desktop-control
+# Requires macOS Accessibility permission or Linux X11/Wayland
+# Agent gets a "desktop" tool: screenshot, click, type, key combos, scroll, drag
+```
+
 Detailed guides: **[Beginners](SETUP_FOR_NEWBIE.md)** | **[Pros](SETUP_FOR_PROS.md)**
 
 **Docker:**
@@ -533,7 +542,7 @@ temm1e reset --confirm       Factory reset with backup
 
 ```bash
 cargo check --workspace                                              # Quick check
-cargo test --workspace                                               # 1,832 tests
+cargo test --workspace                                               # 1,028 tests
 cargo clippy --workspace --all-targets --all-features -- -D warnings # 0 warnings
 cargo fmt --all                                                      # Format
 cargo build --release                                                # Release binary
@@ -547,6 +556,8 @@ Requires Rust 1.82+ and Chrome/Chromium (for the browser tool).
 <summary><strong>Release Timeline</strong> — every version from first breath to now</summary>
 
 ```
+2026-03-28  v3.4.0  ●━━━ Tem Gaze — vision-primary desktop control + Prowl V2 browser upgrade. New temm1e-gaze crate (xcap + enigo), SoM overlay on Tier 3 observations (650 elements stress-tested), zoom_region 2x CDP clip, blueprint bypass (100+ services), desktop screenshot/click/type/key/scroll/drag, auto-capture post-click verification. Proven live: Spotlight→TextEdit→typed message via Gemini Flash. 19 crates, 1028 tests, zero new deps for browser users (desktop feature-gated)
+                    │
 2026-03-22  v3.3.0  ●━━━ WhatsApp Web + Cloud API channels, one-line installer, setup wizard — wa-rs integration (QR scan pairing, Signal Protocol E2E, SQLite sessions), Cloud API with webhook signature validation, install.sh (curl|sh, multi-platform binaries), `temm1e setup` interactive wizard, multi-platform release CI (x86_64+aarch64, Linux+macOS), fix #21 OpenAI empty name field. 1832 tests
                     │
 2026-03-22  v3.2.1  ●━━━ Discord integration + channel-agnostic startup — Discord channel wired into message pipeline (was implemented but never connected), per-message channel map routing (Telegram-only/Discord-only/both simultaneously), DISCORD_BOT_TOKEN env auto-inject, wildcard allowlist ("*"), Discord reply threading via MessageReference, /timelimit command for runtime hive task timeout, hive default bumped to 30min, Docker rebuilt with all features (TUI + Discord + health check + tini). 1825 tests

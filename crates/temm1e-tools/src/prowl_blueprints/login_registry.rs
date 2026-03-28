@@ -65,7 +65,19 @@ pub fn resolve_login_args(args: &str) -> Option<(String, String)> {
     }
 }
 
-fn extract_domain(url: &str) -> Option<String> {
+/// Return an iterator over all known service names in the login registry.
+pub fn known_service_names() -> impl Iterator<Item = &'static str> {
+    KNOWN_SERVICES.keys().copied()
+}
+
+/// Extract the base domain name from a URL.
+///
+/// Examples:
+/// - `https://www.facebook.com/login` → `"facebook"`
+/// - `https://accounts.google.com/signin` → `"accounts"` (note: subdomain, not ideal)
+///
+/// Used for fuzzy service matching between current URL and registry entries.
+pub fn extract_domain(url: &str) -> Option<String> {
     let without_scheme = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;

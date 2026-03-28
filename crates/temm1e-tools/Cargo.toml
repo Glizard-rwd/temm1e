@@ -8,6 +8,7 @@ description = "Tool integrations for TEMM1E agents"
 
 [features]
 browser = ["dep:chromiumoxide", "dep:futures", "dep:base64", "dep:htmd"]
+desktop-control = ["dep:temm1e-gaze"]
 
 [dependencies]
 temm1e-core.workspace = true
@@ -28,6 +29,9 @@ chromiumoxide = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 htmd = { workspace = true, optional = true }
+
+# Optional: Desktop control
+temm1e-gaze = { path = "../temm1e-gaze", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

@@ -105,14 +105,19 @@ Available feature flags:
 
 | Feature | What it includes |
 |---------|-----------------|
-| `telegram` | Telegram channel (teloxide) |
-| `discord` | Discord channel (serenity + poise) |
+| `telegram` | Telegram channel (teloxide) — **default** |
+| `discord` | Discord channel (serenity + poise) — **default** |
 | `slack` | Slack channel (custom HTTP) |
-| `whatsapp` | WhatsApp channel (Business API) |
-| `browser` | Browser automation (chromiumoxide) |
+| `whatsapp` | WhatsApp Cloud API channel |
+| `whatsapp-web` | WhatsApp Web channel (QR scan, wa-rs) |
+| `browser` | Browser automation + Prowl V2 (chromiumoxide) — **default** |
+| `mcp` | MCP client for external tool servers — **default** |
+| `codex-oauth` | ChatGPT Plus/Pro via OAuth PKCE — **default** |
+| `tui` | Interactive terminal UI (ratatui + syntect) |
+| `desktop-control` | Desktop vision control — Tem Gaze (xcap + enigo) |
 | `postgres` | PostgreSQL memory backend (sqlx) |
 
-All features are enabled by default.
+Default features: `telegram`, `discord`, `browser`, `mcp`, `codex-oauth`.
 
 ## Running
 

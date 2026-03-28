@@ -28,9 +28,10 @@ cargo build --release   # ~2.5min cold, 9.6 MB binary
 ### Optional features
 
 ```bash
-cargo build --release --features whatsapp-web   # WhatsApp Web (QR scan)
-cargo build --release --features whatsapp       # WhatsApp Cloud API (webhook)
-cargo build --release --features tui            # Interactive TUI
+cargo build --release --features whatsapp-web      # WhatsApp Web (QR scan)
+cargo build --release --features whatsapp          # WhatsApp Cloud API (webhook)
+cargo build --release --features tui               # Interactive TUI
+cargo build --release --features desktop-control   # Desktop vision control (macOS/Linux)
 ```
 
 ## Authentication — Pick Your Poison
@@ -224,7 +225,7 @@ All four pass before anything touches main. No exceptions.
 cargo check --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
-cargo test --workspace    # 1,378 tests, 0 failures
+cargo test --workspace    # 1,028 tests
 ```
 
 ## Design Documents

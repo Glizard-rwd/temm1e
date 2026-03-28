@@ -131,6 +131,56 @@ The base model made a fundamental arithmetic error. Ten training examples fixed 
 
 ---
 
+## Tem Gaze (Desktop Vision Control)
+
+**An AI agent that sees and controls any computer. No local models. No DOM. Just vision.**
+
+Current web agents (Claude Computer Use, OpenAI Operator, AskUI) control desktops via screenshots. TEMM1E's Tem Prowl controls browsers via DOM. Tem Gaze bridges the gap — extending TEMM1E to full desktop control (Ubuntu + macOS) using the user's already-configured VLM with zero new model dependencies.
+
+Three techniques, all model-agnostic:
+- **Zoom-Refine** — coarse localization then progressive zoom into the target region (+29pp on ScreenSpot-Pro, up to +61% relative improvement)
+- **Set-of-Mark overlay** — numbered labels on detected elements, converting coordinate regression to classification (49x improvement when applied to GPT-4o)
+- **Verify-Retry** — post-action verification catches misclicks (OSAgent achieves superhuman 76.26% on OSWorld through persistent self-checking)
+
+Research surveyed 20+ frameworks, 8 benchmarks, 15+ papers. Key finding: the industry converged on pure vision for desktop (Claude CU, UI-TARS, Agent S2, AskUI, Fara-7B). Desktop accessibility covers only 33-65% of apps. Vision covers 100%.
+
+### Documents
+
+| | |
+|---|---|
+| [Research Paper](gaze/RESEARCH_PAPER.md) | Full landscape: 20+ frameworks, benchmark analysis (OSWorld, ScreenSpot-Pro), accessibility coverage data, multi-model routing rejection, technique evaluation |
+| [Design Doc](gaze/DESIGN.md) | Formal spec: 7 system axioms, ScreenController trait, grounding pipeline with coordinate transform math, SoM overlay, config schema, risk assessment |
+| [Implementation Plan](gaze/IMPLEMENTATION.md) | Phase-by-phase: Prowl V2 (browser), Tem Gaze (desktop), validation benchmarks — every file, function, and test |
+| [Architecture Overview](../docs/design/TEM_GAZE_ARCHITECTURE.md) | Developer-facing: crate map, pipeline diagram, cost profile, platform support matrix |
+| [Experiment Report](gaze/EXPERIMENT_REPORT.md) | 7 live tests (4 browser + 3 desktop): SoM overlay on 650 elements, zoom_region 2x, desktop click opened Finder, full Spotlight→TextEdit→type proof |
+| [Phase 1 Report](gaze/PHASE1_REPORT.md) | Prowl V2 implementation details: 596 lines, 23 tests, compilation gates |
+
+### Benchmarked: 7 live tests on gemini-3-flash-preview, $0.069 total
+
+| Test | Type | Result |
+|------|------|--------|
+| SoM Observe (14 elements) | Browser | PASS — Tier 3, overlays match tree |
+| Zoom Region (2x) | Browser | PASS — 27 KB crop, vision injected |
+| Dense Page (650 elements) | Browser | PASS — zero crash, 178 KB screenshot |
+| Multi-step E2E | Browser | PASS — self-corrected after 94px miss |
+| Desktop Screenshot | Desktop | PASS — identified Arc, iTerm2, VS Code |
+| Desktop Click (Finder) | Desktop | PASS — Finder opened, verified |
+| Full Computer Use Proof | Desktop | PASS — Spotlight→TextEdit→typed message |
+
+**Status:** Implemented. Proven. 45 new tests, 19 crates. Browser + desktop computer use verified live.
+
+---
+
+## Tem Prowl (Web-Native Browsing)
+
+**Headless browsing for messaging-first agents.**
+
+See [TEM_PROWL_PAPER.md](TEM_PROWL_PAPER.md) and [prowl/](prowl/) for the full research, benchmarks, and implementation history. Prowl V2 (browser vision upgrade) shipped as part of the Tem Gaze initiative — SoM overlay generalization, zoom_region action, blueprint bypass.
+
+**Status:** V1 shipped. V2 shipped (Gaze Phase 1).
+
+---
+
 ## Research Philosophy
 
 Every system in Tem's Lab follows the same process:

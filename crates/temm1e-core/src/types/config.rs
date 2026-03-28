@@ -64,6 +64,8 @@ pub struct Temm1eConfig {
     pub tunnel: Option<TunnelConfig>,
     #[serde(default)]
     pub observability: ObservabilityConfig,
+    #[serde(default)]
+    pub gaze: GazeConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -596,6 +598,103 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
+/// Tem Gaze configuration — vision-based interaction enhancements.
+///
+/// Controls browser vision grounding (Prowl V2) and future desktop control.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GazeConfig {
+    /// Enable Gaze vision enhancements (SoM overlay, zoom-refine, blueprint bypass).
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Confidence threshold for direct click without zoom-refine.
+    #[serde(default = "default_gaze_high_confidence")]
+    pub high_confidence: f64,
+    /// Confidence threshold below which SoM fallback is used.
+    #[serde(default = "default_gaze_medium_confidence")]
+    pub medium_confidence: f64,
+    /// Minimum confidence to accept a post-action verification as passing.
+    #[serde(default = "default_gaze_verify_threshold")]
+    pub verify_threshold: f64,
+    /// Maximum retry attempts after verification failure.
+    #[serde(default = "default_gaze_max_retries")]
+    pub max_retries: u32,
+    /// Milliseconds to wait after an action for the UI to settle.
+    #[serde(default = "default_gaze_ui_settle_ms")]
+    pub ui_settle_ms: u64,
+    /// Verification mode: "off", "high_stakes", or "always".
+    #[serde(default = "default_gaze_verify_mode")]
+    pub verify_mode: String,
+    /// Monitor index for desktop control (0 = primary).
+    #[serde(default)]
+    pub monitor: usize,
+    /// Use OS accessibility APIs when available (cost optimizer, off by default).
+    #[serde(default)]
+    pub use_accessibility: bool,
+    /// Browser-specific Gaze settings (Prowl V2).
+    #[serde(default)]
+    pub browser: GazeBrowserConfig,
+}
+
+impl Default for GazeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            high_confidence: default_gaze_high_confidence(),
+            medium_confidence: default_gaze_medium_confidence(),
+            verify_threshold: default_gaze_verify_threshold(),
+            max_retries: default_gaze_max_retries(),
+            ui_settle_ms: default_gaze_ui_settle_ms(),
+            verify_mode: default_gaze_verify_mode(),
+            monitor: 0,
+            use_accessibility: false,
+            browser: GazeBrowserConfig::default(),
+        }
+    }
+}
+
+/// Browser-specific Gaze configuration (Prowl V2 enhancements).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GazeBrowserConfig {
+    /// Enable Set-of-Mark overlays on Tier 3 observations.
+    #[serde(default = "default_true")]
+    pub som_overlay: bool,
+    /// Enable the zoom_region action for detailed region analysis.
+    #[serde(default = "default_true")]
+    pub zoom_region: bool,
+    /// Check Prowl blueprints before vision grounding (0 LLM calls for known flows).
+    #[serde(default = "default_true")]
+    pub blueprint_bypass: bool,
+}
+
+impl Default for GazeBrowserConfig {
+    fn default() -> Self {
+        Self {
+            som_overlay: true,
+            zoom_region: true,
+            blueprint_bypass: true,
+        }
+    }
+}
+
+fn default_gaze_high_confidence() -> f64 {
+    0.85
+}
+fn default_gaze_medium_confidence() -> f64 {
+    0.40
+}
+fn default_gaze_verify_threshold() -> f64 {
+    0.70
+}
+fn default_gaze_max_retries() -> u32 {
+    2
+}
+fn default_gaze_ui_settle_ms() -> u64 {
+    500
+}
+fn default_gaze_verify_mode() -> String {
+    "high_stakes".into()
+}
+
 // ---------------------------------------------------------------------------
 // Agent-Accessible Config — safe subset the agent can read and modify
 // ---------------------------------------------------------------------------
@@ -783,6 +882,7 @@ mod tests {
             tools: ToolsConfig::default(),
             tunnel: None,
             observability: ObservabilityConfig::default(),
+            gaze: GazeConfig::default(),
         };
 
         let toml_str = toml::to_string(&config).unwrap();
