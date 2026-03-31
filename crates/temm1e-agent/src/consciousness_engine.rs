@@ -148,7 +148,7 @@ impl ConsciousnessEngine {
                 content: MessageContent::Text(user_prompt),
             }],
             tools: vec![],
-            max_tokens: Some(150),  // Keep consciousness brief
+            max_tokens: None,
             temperature: Some(0.3), // Low temperature for focused observation
             system: Some(system_prompt),
         };
@@ -256,7 +256,7 @@ impl ConsciousnessEngine {
                 content: MessageContent::Text(user_prompt),
             }],
             tools: vec![],
-            max_tokens: Some(100),
+            max_tokens: None,
             temperature: Some(0.3),
             system: Some(system_prompt.to_string()),
         };
