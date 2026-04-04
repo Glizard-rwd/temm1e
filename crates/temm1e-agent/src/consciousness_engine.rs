@@ -7,10 +7,19 @@
 //!
 //! This is NOT a rule engine. This is a separate mind watching another mind.
 
+use crate::budget;
 use crate::consciousness::{ConsciousnessConfig, TurnObservation};
 use std::sync::{Arc, Mutex};
 use temm1e_core::types::message::{ChatMessage, CompletionRequest, MessageContent, Role};
 use temm1e_core::Provider;
+
+/// Usage from a consciousness LLM call, for budget tracking.
+#[derive(Debug, Clone)]
+pub struct ConsciousnessUsage {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub cost_usd: f64,
+}
 
 /// Pre-LLM observation context.
 #[derive(Debug, Clone)]
@@ -29,6 +38,7 @@ pub struct ConsciousnessEngine {
     config: ConsciousnessConfig,
     provider: Arc<dyn Provider>,
     model: String,
+    model_pricing: budget::ModelPricing,
     session_notes: Mutex<Vec<String>>,
     turn_counter: Mutex<u32>,
     post_insight: Mutex<Option<String>>,
@@ -36,6 +46,7 @@ pub struct ConsciousnessEngine {
 
 impl ConsciousnessEngine {
     pub fn new(config: ConsciousnessConfig, provider: Arc<dyn Provider>, model: String) -> Self {
+        let model_pricing = budget::get_pricing(&model);
         tracing::info!(
             enabled = config.enabled,
             model = %model,
@@ -45,6 +56,7 @@ impl ConsciousnessEngine {
             config,
             provider,
             model,
+            model_pricing,
             session_notes: Mutex::new(Vec::new()),
             turn_counter: Mutex::new(0),
             post_insight: Mutex::new(None),
@@ -61,9 +73,12 @@ impl ConsciousnessEngine {
 
     /// Called BEFORE provider.complete(). Makes its own LLM call to think
     /// about the conversation trajectory and produce an injection.
-    pub async fn pre_observe(&self, obs: &PreObservation) -> Option<String> {
+    pub async fn pre_observe(
+        &self,
+        obs: &PreObservation,
+    ) -> (Option<String>, Option<ConsciousnessUsage>) {
         if !self.config.enabled {
-            return None;
+            return (None, None);
         }
 
         let turn = {
@@ -155,6 +170,16 @@ impl ConsciousnessEngine {
 
         match self.provider.complete(request).await {
             Ok(response) => {
+                let usage = ConsciousnessUsage {
+                    input_tokens: response.usage.input_tokens,
+                    output_tokens: response.usage.output_tokens,
+                    cost_usd: budget::calculate_cost(
+                        response.usage.input_tokens,
+                        response.usage.output_tokens,
+                        &self.model_pricing,
+                    ),
+                };
+
                 let raw: String = response
                     .content
                     .iter()
@@ -176,7 +201,7 @@ impl ConsciousnessEngine {
                     || text.to_lowercase().starts_with("everything looks")
                 {
                     tracing::debug!(turn, "Tem Conscious pre: OK (no injection)");
-                    return None;
+                    return (None, Some(usage));
                 }
 
                 tracing::info!(
@@ -190,11 +215,11 @@ impl ConsciousnessEngine {
                     notes.push(format!("Consciousness-T{}: {}", turn, &text));
                 }
 
-                Some(text)
+                (Some(text), Some(usage))
             }
             Err(e) => {
                 tracing::warn!(turn, error = %e, "Tem Conscious pre: LLM call failed (non-fatal)");
-                None
+                (None, None)
             }
         }
     }
@@ -205,9 +230,9 @@ impl ConsciousnessEngine {
 
     /// Called AFTER process_message() completes. Makes its own LLM call to
     /// evaluate the turn and produce insights for the next pre-observation.
-    pub async fn post_observe(&self, obs: &TurnObservation) {
+    pub async fn post_observe(&self, obs: &TurnObservation) -> Option<ConsciousnessUsage> {
         if !self.config.enabled {
-            return;
+            return None;
         }
 
         let tools_summary = if obs.tools_called.is_empty() {
@@ -263,6 +288,16 @@ impl ConsciousnessEngine {
 
         match self.provider.complete(request).await {
             Ok(response) => {
+                let usage = ConsciousnessUsage {
+                    input_tokens: response.usage.input_tokens,
+                    output_tokens: response.usage.output_tokens,
+                    cost_usd: budget::calculate_cost(
+                        response.usage.input_tokens,
+                        response.usage.output_tokens,
+                        &self.model_pricing,
+                    ),
+                };
+
                 let raw: String = response
                     .content
                     .iter()
@@ -309,6 +344,8 @@ impl ConsciousnessEngine {
                         "Tem Conscious post: OK (turn was fine)"
                     );
                 }
+
+                Some(usage)
             }
             Err(e) => {
                 tracing::warn!(
@@ -325,6 +362,7 @@ impl ConsciousnessEngine {
                         obs.tools_called.join(",")
                     ));
                 }
+                None
             }
         }
     }
