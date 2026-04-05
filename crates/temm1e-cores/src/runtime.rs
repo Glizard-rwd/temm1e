@@ -1,12 +1,13 @@
 //! Core runtime — the simplified agent loop for TemDOS cores.
 //!
-//! This is the heart of TemDOS. A stripped-down agent loop with exactly
-//! the features a specialist core needs:
+//! This is the heart of TemDOS. A stripped-down agent loop that inherits
+//! Tem's Mind execution cycle: ORDER → THINK → ACTION → VERIFY → DONE.
 //!
-//! - System prompt (from core definition)
-//! - Tool loop (call LLM → parse tool_use → execute tools → loop)
-//! - Budget checking (shared with main agent)
-//! - Simple history management
+//! - **ORDER**: Receives task string from main agent
+//! - **THINK**: Builds context (system prompt + history + tool defs)
+//! - **ACTION**: Calls LLM, executes tools
+//! - **VERIFY**: Failure tracking + strategy rotation (inherited from self_correction.rs)
+//! - **DONE**: LLM stops calling tools (implicit for single-task specialists)
 //!
 //! What it does NOT have: classification, blueprints, consciousness,
 //! social intelligence, streaming, prompted tool calling, lambda memory,
@@ -17,6 +18,7 @@ use std::sync::Arc;
 
 use temm1e_agent::budget::{self, BudgetTracker, ModelPricing};
 use temm1e_agent::executor::execute_tool;
+use temm1e_agent::self_correction::FailureTracker;
 use temm1e_core::types::error::Temm1eError;
 use temm1e_core::types::message::{
     ChatMessage, CompletionRequest, ContentPart, MessageContent, Role, ToolDefinition,
@@ -117,6 +119,11 @@ impl CoreRuntime {
         let mut total_output_tokens: u32 = 0;
         let mut total_cost: f64 = 0.0;
 
+        // VERIFY: failure tracking — inherited from Tem's Mind self-correction.
+        // Tracks consecutive failures per tool and injects strategy rotation
+        // prompts after 2 failures, preventing blind retries.
+        let mut failure_tracker = FailureTracker::default();
+
         info!(
             core = %self.core_name,
             tools = tool_defs.len(),
@@ -201,7 +208,7 @@ impl CoreRuntime {
                 content: MessageContent::Parts(response.content.clone()),
             });
 
-            // Execute each tool call
+            // Execute each tool call + VERIFY (failure tracking)
             let mut tool_result_parts = Vec::new();
             for (tool_use_id, tool_name, arguments) in &tool_uses {
                 debug!(
@@ -214,10 +221,29 @@ impl CoreRuntime {
                 let result =
                     execute_tool(tool_name, arguments.clone(), &self.tools, &session).await;
 
-                let (content, is_error) = match result {
+                let (mut content, is_error) = match result {
                     Ok(out) => (out.content, out.is_error),
                     Err(e) => (format!("Error: {e}"), true),
                 };
+
+                // VERIFY: track tool success/failure for strategy rotation
+                if is_error {
+                    failure_tracker.record_failure(tool_name, &content);
+
+                    // Inject strategy rotation prompt after N consecutive failures
+                    if let Some(rotation_prompt) = failure_tracker.format_rotation_prompt(tool_name)
+                    {
+                        debug!(
+                            core = %self.core_name,
+                            tool = %tool_name,
+                            failures = failure_tracker.failure_count(tool_name),
+                            "VERIFY: strategy rotation triggered"
+                        );
+                        content.push_str(&rotation_prompt);
+                    }
+                } else {
+                    failure_tracker.record_success(tool_name);
+                }
 
                 tool_result_parts.push(ContentPart::ToolResult {
                     tool_use_id: tool_use_id.clone(),
@@ -369,5 +395,49 @@ mod tests {
         async fn list_models(&self) -> Result<Vec<String>, Temm1eError> {
             Ok(vec!["mock".to_string()])
         }
+    }
+
+    #[test]
+    fn verify_failure_tracker_integrates_with_core() {
+        // VERIFY: FailureTracker from self_correction.rs works in core context
+        let mut tracker = FailureTracker::default();
+        assert_eq!(tracker.max_failures, 2);
+
+        // First failure — no rotation yet
+        tracker.record_failure("shell", "command not found: foo");
+        assert!(!tracker.should_rotate_strategy("shell"));
+        assert!(tracker.format_rotation_prompt("shell").is_none());
+
+        // Second failure — triggers strategy rotation
+        tracker.record_failure("shell", "command not found: bar");
+        assert!(tracker.should_rotate_strategy("shell"));
+
+        let prompt = tracker.format_rotation_prompt("shell").unwrap();
+        assert!(prompt.contains("STRATEGY ROTATION"));
+        assert!(prompt.contains("Do NOT retry the same approach"));
+        assert!(prompt.contains("3 alternative approaches"));
+
+        // Success resets the tracker
+        tracker.record_success("shell");
+        assert!(!tracker.should_rotate_strategy("shell"));
+        assert_eq!(tracker.failure_count("shell"), 0);
+    }
+
+    #[test]
+    fn verify_tracks_per_tool_independently() {
+        let mut tracker = FailureTracker::default();
+
+        tracker.record_failure("shell", "err1");
+        tracker.record_failure("shell", "err2");
+        tracker.record_failure("file_read", "not found");
+
+        // Shell hit threshold, file_read didn't
+        assert!(tracker.should_rotate_strategy("shell"));
+        assert!(!tracker.should_rotate_strategy("file_read"));
+
+        // Success on shell doesn't affect file_read
+        tracker.record_success("shell");
+        assert!(!tracker.should_rotate_strategy("shell"));
+        assert_eq!(tracker.failure_count("file_read"), 1);
     }
 }
