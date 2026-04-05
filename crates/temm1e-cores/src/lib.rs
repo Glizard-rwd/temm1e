@@ -1,8 +1,8 @@
 //! # TemDOS — Tem Delegated Operating Subsystem
 //!
 //! Specialist sub-agents (Cores) that run as tools within TEMM1E's main agent loop.
-//! Inspired by GLaDOS's personality cores from Portal — a central consciousness
-//! with specialist modules that feed information back.
+//! Architecture inspired by GLaDOS's personality cores from Portal — a central
+//! consciousness with specialist modules that feed information back.
 //!
 //! ## Architecture
 //!

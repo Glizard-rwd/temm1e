@@ -13,7 +13,7 @@ This replaces ad-hoc subagent spawning with stable, versioned, tested specialist
 
 ## Part 0: Formal Definitions
 
-### The Main Agent (GLaDOS)
+### The Main Agent
 
 The **Main Agent** is TEMM1E's central consciousness — the single entity that owns the user conversation, holds conversation history, manages the budget, and makes all high-level decisions. It is the `AgentRuntime` in `crates/temm1e-agent/src/runtime.rs`.
 
@@ -57,7 +57,7 @@ A **Core** is a specialist sub-agent — a pre-defined, versioned, tested AI ent
 ```
 User: "Refactor the provider system to support streaming for all backends"
 
-Main Agent (GLaDOS):
+Main Agent:
   1. Classifies: Order (Complex)
   2. Thinks: "I need to understand the current architecture before refactoring"
   3. Invokes invoke_core(core="architecture", task="Map the provider crate:
@@ -77,7 +77,7 @@ Main Agent (GLaDOS):
 - Cores figure out the DETAILS (research, analysis, auditing)
 - The Main Agent acts on the Core's findings (implementation)
 
-This mirrors GLaDOS: she makes decisions. The cores feed her information. The morality core doesn't steer the ship — it informs the captain.
+The main agent makes decisions. The cores feed it information. A specialist core doesn't steer the ship — it informs the captain.
 
 ### Authoring Custom Cores (User Guide)
 

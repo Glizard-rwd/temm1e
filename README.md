@@ -483,7 +483,7 @@ Most AI assistants are born fresh every conversation — no scars, no growth, no
 
 ### TemDOS — Specialist Sub-Agent Cores
 
-Most AI agents are generalists — they do everything themselves, polluting their context window with research that should have been delegated. TemDOS (Tem Delegated Operating Subsystem) introduces specialist sub-agents inspired by GLaDOS's personality cores from Portal. The main agent is the central consciousness. Cores are experts that inform but never steer.
+Most AI agents are generalists — they do everything themselves, polluting their context window with research that should have been delegated. TemDOS (Tem Delegated Operating Subsystem) introduces specialist sub-agent cores, inspired by GLaDOS's personality core architecture from Portal. A central consciousness with specialist modules that feed information back. The main agent is the decision-maker. Cores are experts that inform but never steer.
 
 **How it works:**
 - **Main Agent** decides what to do (strategy, user interaction, final decisions)
@@ -801,7 +801,7 @@ Requires Rust 1.82+ and Chrome/Chromium (for the browser tool).
 <summary><strong>Release Timeline</strong> — every version from first breath to now</summary>
 
 ```
-2026-04-05  v4.4.0  ●━━━ TemDOS — Tem Delegated Operating Subsystem. Specialist sub-agent cores inspired by GLaDOS personality cores. 8 foundational cores (architecture, code-review, test, debug, web, desktop, research, creative). Cores run as tools in the main agent loop with full tool access, shared budget (Arc<BudgetTracker>), and structural recursion prevention (invoke_core filtered from core tool set). Context isolation: core research stays in core's session, main agent receives only distilled answers. Parallel invocation via existing execute_tools_parallel. Core definitions in .md files (YAML frontmatter + system prompt). Autonomous invocation verified with Gemini 3.1 Pro. A/B tested: 0/3 task completion without cores vs 3/3 with cores, 77% main agent context reduction. 22 crates, 2065 tests.
+2026-04-05  v4.4.0  ●━━━ TemDOS — Tem Delegated Operating Subsystem. Specialist sub-agent cores inspired by GLaDOS's personality core architecture from Portal. 8 foundational cores (architecture, code-review, test, debug, web, desktop, research, creative). Cores run as tools in the main agent loop with full tool access, shared budget (Arc<BudgetTracker>), and structural recursion prevention (invoke_core filtered from core tool set). Context isolation: core research stays in core's session, main agent receives only distilled answers. Parallel invocation via existing execute_tools_parallel. Core definitions in .md files (YAML frontmatter + system prompt). Autonomous invocation verified with Gemini 3.1 Pro. A/B tested: 0/3 task completion without cores vs 3/3 with cores, 77% main agent context reduction. 22 crates, 2065 tests.
                     │
 2026-04-04  v4.3.0  ●━━━ Tem Anima — emotional intelligence, adaptive user profiling, configurable personality. Four-layer EI architecture (perception, self model, user model, communication). LLM-evaluated user profiles every N turns (background, zero latency). Confidence-gated prompt injection (~100-200 anima tokens in the SKULL). Personality centralization (personality.toml + soul.md). Anti-sycophancy structural enforcement. Ethics framework: transparency, user control, minimal inference. 21 crates, 2049 tests.
                     │
